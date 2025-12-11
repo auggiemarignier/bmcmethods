@@ -2,7 +2,7 @@
 
 import numpy as np
 import pytest
-from sddr.priors import (
+from sampling.priors import (
     CompoundPrior,
     GaussianPrior,
     PriorComponent,

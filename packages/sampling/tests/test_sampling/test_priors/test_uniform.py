@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 import numpy as np
 import pytest
-from sddr.priors import UniformPrior
+from sampling.priors import UniformPrior
 
 
 @pytest.fixture

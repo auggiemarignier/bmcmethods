@@ -6,7 +6,7 @@ behaviour, and error on unimplemented prior initialisation.
 
 import numpy as np
 import pytest
-from sddr.sampling import MCMCConfig, mcmc
+from sampling.sampling import MCMCConfig, mcmc
 
 
 def simple_log_p(theta: np.ndarray) -> float:

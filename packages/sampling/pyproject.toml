@@ -1,5 +1,5 @@
 [project]
-name = "sddr"
+name = "sampling"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -8,11 +8,11 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "harmonic>=1.3.1",
+    "emcee>=3.1.6",
 ]
 
 [project.scripts]
-sddr = "sddr:main"
+sampling = "sampling:main"
 
 [build-system]
 requires = ["uv_build>=0.8.2,<0.9.0"]

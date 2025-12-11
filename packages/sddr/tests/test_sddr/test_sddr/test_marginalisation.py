@@ -4,14 +4,14 @@ from collections.abc import Callable
 
 import numpy as np
 import pytest
-from sddr.priors import (
+from sampling.priors import (
     CompoundPrior,
     GaussianPrior,
     PriorComponent,
     PriorFunction,
     UniformPrior,
-    marginalise_prior,
 )
+from sddr.marginalisation import marginalise_prior
 
 
 @pytest.fixture

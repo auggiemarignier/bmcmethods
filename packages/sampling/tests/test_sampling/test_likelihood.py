@@ -4,7 +4,7 @@ import pickle
 
 import numpy as np
 import pytest
-from sddr.likelihood import GaussianLikelihood
+from sampling.likelihood import GaussianLikelihood
 
 
 def _dummy_forward_fn(model_params: np.ndarray) -> np.ndarray:
@@ -125,7 +125,7 @@ def test_gaussian_likelihood_no_covariance_validation(monkeypatch):
         raise AssertionError("Should not be called!")
 
     monkeypatch.setattr(
-        "sddr.likelihood._validate_covariance_matrix",
+        "sampling.likelihood._validate_covariance_matrix",
         fake_validate_covariance_matrix,
     )
 

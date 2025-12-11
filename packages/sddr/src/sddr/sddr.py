@@ -6,10 +6,10 @@ from warnings import warn
 import harmonic as hm
 import numpy as np
 from harmonic.model import RealNVPModel
+from sampling.priors import CompoundPrior
 from scipy.stats import gaussian_kde
 
-from .posterior import marginalise_samples
-from .priors import CompoundPrior
+from .marginalisation import marginalise_samples
 
 
 @dataclass(frozen=True)

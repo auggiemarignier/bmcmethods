@@ -2,10 +2,10 @@
 
 import numpy as np
 import pytest
-from sddr.priors import PriorComponent
-from sddr.priors.compound import CompoundPrior, CompoundPriorConfig
-from sddr.priors.gaussian import GaussianPrior, GaussianPriorComponentConfig
-from sddr.priors.uniform import UniformPrior, UniformPriorComponentConfig
+from sampling.priors import PriorComponent
+from sampling.priors.compound import CompoundPrior, CompoundPriorConfig
+from sampling.priors.gaussian import GaussianPrior, GaussianPriorComponentConfig
+from sampling.priors.uniform import UniformPrior, UniformPriorComponentConfig
 
 
 class TestUniformPriorComponentConfig:

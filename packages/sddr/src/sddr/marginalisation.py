@@ -5,12 +5,11 @@ from functools import singledispatch
 from typing import overload
 
 import numpy as np
-
-from ._protocols import PriorFunction
-from ._utils import _normalise_indices
-from .compound import CompoundPrior, PriorComponent
-from .gaussian import GaussianPrior
-from .uniform import UniformPrior
+from sampling.priors._protocols import PriorFunction
+from sampling.priors._utils import _normalise_indices
+from sampling.priors.compound import CompoundPrior, PriorComponent
+from sampling.priors.gaussian import GaussianPrior
+from sampling.priors.uniform import UniformPrior
 
 
 @overload
@@ -158,3 +157,24 @@ def _(
         )
 
     return CompoundPrior(new_components)
+
+
+def marginalise_samples(
+    samples: np.ndarray, param_indices: Sequence[int] | slice
+) -> np.ndarray:
+    """
+    Extract marginal posterior samples for specified parameter indices.
+
+    Parameters
+    ----------
+    samples : ndarray, shape (n_samples, n_params)
+        Posterior samples.
+    param_indices : Sequence[int] | slice
+        Indices of parameters to extract (i.e., columns to keep).
+
+    Returns
+    -------
+    marginal_samples : ndarray, shape (n_samples, n_selected_params)
+        Posterior samples for the selected parameters.
+    """
+    return samples[:, param_indices]

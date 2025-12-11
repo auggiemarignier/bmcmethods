@@ -4,7 +4,8 @@ import pickle
 
 import numpy as np
 import pytest
-from sddr.posterior import Posterior, marginalise_samples
+from sampling.posterior import Posterior
+from sddr.marginalisation import marginalise_samples
 
 
 def _dummy_likelihood_fn(params):

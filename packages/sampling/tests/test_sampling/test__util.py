@@ -9,7 +9,7 @@ switch between serial and parallel execution without branching.
 from multiprocessing import Pool
 
 import pytest
-from sddr._util import DummyPool
+from sampling._util import DummyPool
 
 
 def _square(x: int) -> int:

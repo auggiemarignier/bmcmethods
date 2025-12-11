@@ -12,6 +12,7 @@ members = [
     "bmcmethods",
     "linear-gaussian",
     "ris",
+    "sampling",
     "sddr",
     "transc",
 ]
@@ -186,6 +187,7 @@ dependencies = [
     { name = "linear-gaussian" },
     { name = "numpy" },
     { name = "ris" },
+    { name = "sampling" },
     { name = "sddr" },
     { name = "transc" },
 ]
@@ -201,6 +203,7 @@ requires-dist = [
     { name = "linear-gaussian", editable = "packages/linear_gaussian" },
     { name = "numpy", specifier = ">=2.3.5" },
     { name = "ris", editable = "packages/ris" },
+    { name = "sampling", editable = "packages/sampling" },
     { name = "sddr", editable = "packages/sddr" },
     { name = "transc", editable = "packages/transc" },
 ]
@@ -2410,6 +2413,17 @@ wheels = [
 ]
 
 [[package]]
+name = "sampling"
+version = "0.1.0"
+source = { editable = "packages/sampling" }
+dependencies = [
+    { name = "emcee" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "emcee", specifier = ">=3.1.6" }]
+
+[[package]]
 name = "scikit-learn"
 version = "1.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2519,15 +2533,11 @@ name = "sddr"
 version = "0.1.0"
 source = { editable = "packages/sddr" }
 dependencies = [
-    { name = "emcee" },
     { name = "harmonic" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "emcee", specifier = ">=3.1.6" },
-    { name = "harmonic", specifier = ">=1.3.1" },
-]
+requires-dist = [{ name = "harmonic", specifier = ">=1.3.1" }]
 
 [[package]]
 name = "send2trash"

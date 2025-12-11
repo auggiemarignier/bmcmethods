@@ -2,7 +2,7 @@
 
 import numpy as np
 import pytest
-from sddr.priors import GaussianPrior
+from sampling.priors import GaussianPrior
 
 
 def test_gaussian_prior_n() -> None:

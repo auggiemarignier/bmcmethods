@@ -1,6 +1,6 @@
 """Constructing and fitting the normalised posterior distribution."""
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 
 import numpy as np
 
@@ -48,24 +48,3 @@ class Posterior:
         log_likelihood = self.likelihood_fn(model_params)
         log_prior = self.prior_fn(model_params)
         return log_likelihood + log_prior
-
-
-def marginalise_samples(
-    samples: np.ndarray, param_indices: Sequence[int] | slice
-) -> np.ndarray:
-    """
-    Extract marginal posterior samples for specified parameter indices.
-
-    Parameters
-    ----------
-    samples : ndarray, shape (n_samples, n_params)
-        Posterior samples.
-    param_indices : Sequence[int] | slice
-        Indices of parameters to extract (i.e., columns to keep).
-
-    Returns
-    -------
-    marginal_samples : ndarray, shape (n_samples, n_selected_params)
-        Posterior samples for the selected parameters.
-    """
-    return samples[:, param_indices]

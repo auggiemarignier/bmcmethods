@@ -13,6 +13,7 @@ dependencies = [
     "ris",
     "sddr",
     "transc",
+    "sampling",
 ]
 
 [tool.uv.sources]
@@ -20,6 +21,7 @@ linear_gaussian = { workspace = true }
 ris = { workspace = true }
 sddr = { workspace = true }
 transc = { workspace = true }
+sampling = { workspace = true }
 
 [tool.uv.workspace]
 members = [
@@ -27,6 +29,7 @@ members = [
     "packages/ris",
     "packages/sddr",
     "packages/transc",
+    "packages/sampling",
 ]
 
 [dependency-groups]
