@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from ris!")
+"""Estimate evidence by Reciprocal Importance Sampling."""

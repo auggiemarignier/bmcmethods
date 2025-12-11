@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from transc!")
+"""TransConceptual sampling methods for estimating model evidence."""

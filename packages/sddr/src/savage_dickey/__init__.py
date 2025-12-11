@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from savage-dickey!")
+"""Savage-Dickey density ratio for estimating Bayes factors."""
