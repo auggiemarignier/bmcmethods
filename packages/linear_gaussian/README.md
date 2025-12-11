@@ -1,0 +1,1 @@
+# Analytical Gaussian With Linear Mappings

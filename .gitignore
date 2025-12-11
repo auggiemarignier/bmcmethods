@@ -1,0 +1,63 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+.env
+.env.*
+
+# Pytest cache
+.pytest_cache/
+.cache/
+
+# IDE files
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# macOS system files
+.DS_Store
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+.cache/
+
+# Mypy
+.mypy_cache/
+.dmypy.json
+
+# Pylint
+pylint-report.txt
+
+# Profiling data
+.prof
+
+# Logs
+*.log
+
+# Test output
+nosetests.xml
+coverage.xml
+test-results/
+
+# Sphinx documentation
+docs/_build/
+
+# pipenv
+Pipfile.lock
+
+# Poetry
+poetry.lock
+
+# pyenv
+.python-version

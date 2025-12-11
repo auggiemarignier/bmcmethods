@@ -1,0 +1,10 @@
+{
+    "cSpell.words": [
+        "bmcmethods"
+    ],
+    "python.testing.pytestArgs": [
+        "packages"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
+}
