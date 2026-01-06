@@ -7,7 +7,9 @@ authors = [
     { name = "auggiemarignier", email = "auggie.marignier@earth.ox.ac.uk" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pytransc>=0.3.0a1",
+]
 
 [project.scripts]
 transc = "transc:main"
