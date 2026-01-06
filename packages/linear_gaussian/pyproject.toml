@@ -7,10 +7,9 @@ authors = [
     { name = "auggiemarignier", email = "auggie.marignier@earth.ox.ac.uk" }
 ]
 requires-python = ">=3.12"
-dependencies = []
-
-[project.scripts]
-linear-gaussian = "linear_gaussian:main"
+dependencies = [
+    "numpy>=2.3.5",
+]
 
 [build-system]
 requires = ["uv_build>=0.8.2,<0.9.0"]

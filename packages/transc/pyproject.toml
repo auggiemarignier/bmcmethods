@@ -8,11 +8,9 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "numpy>=2.3.5",
     "pytransc>=0.3.0a1",
 ]
-
-[project.scripts]
-transc = "transc:main"
 
 [build-system]
 requires = ["uv_build>=0.8.2,<0.9.0"]
