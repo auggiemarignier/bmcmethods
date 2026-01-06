@@ -4,7 +4,7 @@ import pickle
 
 import numpy as np
 import pytest
-from sampling.likelihood import GaussianLikelihood
+from sampling.likelihood import GaussianLikelihood, _validate_covariance_matrix
 
 
 def _dummy_forward_fn(model_params: np.ndarray) -> np.ndarray:
@@ -134,3 +134,120 @@ def test_gaussian_likelihood_no_covariance_validation(monkeypatch):
         lambda x: observed_data, observed_data, inv_covar, validate_covariance=False
     )
     assert not called
+
+
+def test_validate_covariance_matrix_scalar_positive():
+    # Should not raise
+    _validate_covariance_matrix(np.array([1.0]), 1)
+
+
+def test_validate_covariance_matrix_scalar_nonpositive():
+    with pytest.raises(ValueError, match="Variance scalar must be positive"):
+        _validate_covariance_matrix(np.array([0.0]), 1)
+    with pytest.raises(ValueError, match="Variance scalar must be positive"):
+        _validate_covariance_matrix(np.array([-1.0]), 1)
+
+
+def test_validate_covariance_matrix_diagonal_positive():
+    # Should not raise
+    _validate_covariance_matrix(np.array([1.0, 2.0, 3.0]), 3)
+
+
+def test_validate_covariance_matrix_diagonal_nonpositive():
+    with pytest.raises(
+        ValueError, match="Covariance diagonal elements must be positive"
+    ):
+        _validate_covariance_matrix(np.array([1.0, 0.0, 2.0]), 3)
+    with pytest.raises(
+        ValueError, match="Covariance diagonal elements must be positive"
+    ):
+        _validate_covariance_matrix(np.array([1.0, -2.0, 2.0]), 3)
+
+
+def test_validate_covariance_matrix_full_valid():
+    mat = np.eye(2)
+    _validate_covariance_matrix(mat, 2)
+
+
+def test_validate_covariance_matrix_full_wrong_shape():
+    mat = np.eye(3)
+    with pytest.raises(
+        ValueError, match="Covariance matrix must be of shape \\(2, 2\\)"
+    ):
+        _validate_covariance_matrix(mat, 2)
+
+
+def test_validate_covariance_matrix_full_nonsymmetric():
+    mat = np.array([[1.0, 2.0], [0.0, 1.0]])
+    with pytest.raises(ValueError, match="Covariance matrix must be symmetric"):
+        _validate_covariance_matrix(mat, 2)
+
+
+def test_validate_covariance_matrix_full_not_pos_semidefinite():
+    mat = np.array([[1.0, 0.0], [0.0, -1.0]])
+    with pytest.raises(
+        ValueError, match="Inverse covariance matrix must be positive semidefinite"
+    ):
+        _validate_covariance_matrix(mat, 2)
+
+
+class TestExponentialTermFunctions:
+    class Dummy(GaussianLikelihood):
+        def __init__(self, inv_covar):
+            self.inv_covar = inv_covar
+
+    residual = np.array([1.0, 2.0])
+
+    def test_exponential_term_full(self):
+        inv_covar = np.array([[2.0, 0.0], [0.0, 1.0]])
+        dummy = self.Dummy(inv_covar)
+        expected = -0.5 * self.residual.T @ inv_covar @ self.residual
+        result = dummy._exponential_term_full(self.residual)
+        assert np.isclose(result, expected)
+
+    def test_exponential_term_diagonal(self):
+        inv_covar = np.array([2.0, 1.0])
+        dummy = self.Dummy(inv_covar)
+        expected = -0.5 * np.sum(self.residual**2 * inv_covar)
+        result = dummy._exponential_term_diagonal(self.residual)
+        assert np.isclose(result, expected)
+
+    def test_exponential_term_scalar(self):
+        inv_covar = np.array([2.0])
+        dummy = self.Dummy(inv_covar)
+        expected = -0.5 * np.sum(self.residual**2) * inv_covar[0]
+        result = dummy._exponential_term_scalar(self.residual)
+        assert np.isclose(result, expected)
+
+
+class TestChooseExponentialTermFunction:
+    class Dummy(GaussianLikelihood):
+        def __init__(self, inv_covar):
+            self.inv_covar = inv_covar
+
+        def _exponential_term_full(self, residual: np.ndarray):
+            return "full"
+
+        def _exponential_term_diagonal(self, residual: np.ndarray):
+            return "diag"
+
+        def _exponential_term_scalar(self, residual: np.ndarray):
+            return "scalar"
+
+    def test_choose_exponential_term_function_full(self):
+        inv_covar = np.eye(2)
+        dummy = self.Dummy(inv_covar)
+        fn = dummy._choose_exponential_term_function()
+        assert fn(np.zeros(2)) == "full"
+
+    def test_choose_exponential_term_function_diagonal(self):
+        inv_covar = np.array([1.0, 2.0])
+        dummy = self.Dummy(inv_covar)
+        fn = dummy._choose_exponential_term_function()
+        assert fn(np.zeros(2)) == "diag"
+
+    def test_choose_exponential_term_function_scalar(self):
+        inv_covar = np.array([1.0])
+        dummy = self.Dummy(inv_covar)
+        fn = dummy._choose_exponential_term_function()
+        assert fn(np.zeros(1)) == "scalar"
