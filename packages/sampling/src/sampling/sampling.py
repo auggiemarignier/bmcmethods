@@ -8,6 +8,8 @@ import numpy as np
 from emcee import EnsembleSampler
 
 from ._util import DummyPool
+from .posterior import Posterior
+from .priors import PriorFunction
 
 
 @dataclass(frozen=True)
@@ -43,7 +45,8 @@ class MCMCConfig:
 
 def mcmc(
     ndim: int,
-    posterior: Callable[[np.ndarray], float],
+    likelihood: Callable[[np.ndarray], float],
+    prior: PriorFunction,
     rng: np.random.Generator,
     config: MCMCConfig | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -53,8 +56,10 @@ def mcmc(
     ----------
     ndim : int
         Number of dimensions in the parameter space.
-    posterior : Callable[[np.ndarray], float]
-        Log-posterior function that takes a parameter array and returns a float.
+    likelihood : Callable[[ndarray], float]
+        Likelihood function that takes model parameters and returns log-likelihood.
+    prior : PriorFunction
+        Prior function that takes model parameters and returns log-prior.
     rng : np.random.Generator
         Random number generator for initializing walkers.
     config : MCMCConfig or None, optional
@@ -70,11 +75,9 @@ def mcmc(
     if config is None:
         config = MCMCConfig()
 
-    if config.initial_from_prior:
-        raise NotImplementedError("Initialisation from prior not yet implemented.")
-    else:
-        initial_pos = rng.normal(0, 1, size=(config.nwalkers, ndim))
+    initial_pos = prior.sample(config.nwalkers, rng)
 
+    posterior = Posterior(likelihood, prior)
     p = Pool if config.parallel else DummyPool
 
     with p() as pool:

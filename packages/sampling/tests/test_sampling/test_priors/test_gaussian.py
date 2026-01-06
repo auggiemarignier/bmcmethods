@@ -134,3 +134,33 @@ def test_gaussian_prior_diagonal_covariance() -> None:
 
     # Expected: -0.5 * (1^2) = -0.5
     np.testing.assert_allclose(log_prior, -0.5, rtol=1e-10)
+
+
+def test_gaussian_prior_sample_shape() -> None:
+    mean = np.array([0.0, 0.0])
+    covar = np.eye(2)
+    prior = GaussianPrior(mean, covar)
+    rng = np.random.default_rng(42)
+    samples = prior.sample(10, rng)
+    assert samples.shape == (10, 2)
+
+
+def test_gaussian_prior_sample_mean() -> None:
+    mean = np.array([1.0, -1.0])
+    covar = np.eye(2)
+    prior = GaussianPrior(mean, covar)
+    rng = np.random.default_rng(123)
+    samples = prior.sample(1000, rng)
+    sample_mean = np.mean(samples, axis=0)
+    np.testing.assert_allclose(sample_mean, mean, atol=0.1)
+
+
+def test_gaussian_prior_sample_reproducibility() -> None:
+    mean = np.array([0.0, 0.0])
+    covar = np.eye(2)
+    prior = GaussianPrior(mean, covar)
+    rng1 = np.random.default_rng(2024)
+    rng2 = np.random.default_rng(2024)
+    samples1 = prior.sample(5, rng1)
+    samples2 = prior.sample(5, rng2)
+    np.testing.assert_array_equal(samples1, samples2)

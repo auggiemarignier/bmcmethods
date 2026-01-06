@@ -31,6 +31,22 @@ class PriorFunction(Protocol):
     def __call__(self, model_params: np.ndarray) -> float:
         """Calculate the log-prior for given model parameters."""
 
+    def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
+        """Sample from the prior.
+
+        Parameters
+        ----------
+        num_samples : int
+            Number of samples to draw.
+        rng : np.random.Generator
+            Random number generator.
+
+        Returns
+        -------
+        samples : ndarray, shape (num_samples, n)
+            Samples drawn from the prior.
+        """
+
 
 class PriorComponentConfig(Protocol):
     """Protocol for prior configuration objects."""

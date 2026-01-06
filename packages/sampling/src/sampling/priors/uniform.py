@@ -43,6 +43,27 @@ class UniformPrior:
         )
         return float(np.where(out_of_bounds, -np.inf, 0.0))
 
+    def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
+        """Sample from the Uniform prior.
+
+        Parameters
+        ----------
+        num_samples : int
+            Number of samples to draw.
+        rng : np.random.Generator
+            Random number generator.
+
+        Returns
+        -------
+        samples : ndarray, shape (num_samples, n)
+            Samples drawn from the Uniform prior.
+        """
+        return rng.uniform(
+            low=self.lower_bounds,
+            high=self.upper_bounds,
+            size=(num_samples, self._n),
+        )
+
     @property
     def config_params(self) -> list[np.ndarray]:
         """Configuration parameters of the prior."""

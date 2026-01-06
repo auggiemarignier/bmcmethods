@@ -77,6 +77,29 @@ class CompoundPrior:
             total_log_prior += component_log_prior
         return total_log_prior
 
+    def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
+        """Sample from the compound prior.
+
+        Parameters
+        ----------
+        num_samples : int
+            Number of samples to draw.
+        rng : np.random.Generator
+            Random number generator.
+
+        Returns
+        -------
+        samples : ndarray, shape (num_samples, n)
+            Samples drawn from the compound prior.
+        """
+        samples = np.empty((num_samples, self._n))
+
+        for component in self.prior_components:
+            component_samples = component.prior_fn.sample(num_samples, rng)
+            samples[:, component.indices] = component_samples
+
+        return samples
+
     @property
     def n(self) -> int:
         """Total number of parameters in the compound prior."""

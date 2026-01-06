@@ -33,6 +33,24 @@ class GaussianPrior:
         diff = model_params - self.mean
         return float(-0.5 * diff.T @ self.inv_covar @ diff)
 
+    def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
+        """Sample from the Gaussian prior.
+
+        Parameters
+        ----------
+        num_samples : int
+            Number of samples to draw.
+        rng : np.random.Generator
+            Random number generator.
+
+        Returns
+        -------
+        samples : ndarray, shape (num_samples, n)
+            Samples drawn from the Gaussian prior.
+        """
+        covar = np.linalg.inv(self.inv_covar)
+        return rng.multivariate_normal(self.mean, covar, size=num_samples)
+
     @property
     def config_params(self) -> list[np.ndarray]:
         """Configuration parameters of the prior."""

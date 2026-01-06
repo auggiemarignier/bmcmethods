@@ -158,3 +158,26 @@ def test_uniform_prior_high_dimensional() -> None:
     params_out = np.full(n_dims, 0.5)
     params_out[5] = 1.1
     assert prior_fn(params_out) == -np.inf
+
+
+def test_uniform_prior_sample_shape(valid_uniform_prior: UniformPrior) -> None:
+    rng = np.random.default_rng(42)
+    samples = valid_uniform_prior.sample(10, rng)
+    assert samples.shape == (10, valid_uniform_prior.n)
+
+
+def test_uniform_prior_sample_bounds(valid_uniform_prior: UniformPrior) -> None:
+    rng = np.random.default_rng(123)
+    samples = valid_uniform_prior.sample(100, rng)
+    assert np.all(samples >= valid_uniform_prior.lower_bounds)
+    assert np.all(samples <= valid_uniform_prior.upper_bounds)
+
+
+def test_uniform_prior_sample_reproducibility(
+    valid_uniform_prior: UniformPrior,
+) -> None:
+    rng1 = np.random.default_rng(2024)
+    rng2 = np.random.default_rng(2024)
+    samples1 = valid_uniform_prior.sample(5, rng1)
+    samples2 = valid_uniform_prior.sample(5, rng2)
+    np.testing.assert_array_equal(samples1, samples2)

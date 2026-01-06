@@ -84,3 +84,15 @@ class TestCompoundPrior:
         model = np.array([0.1, -0.1, 2.0, -0.5])
         log_prior_out_uniform = compound_prior(model)
         assert log_prior_out_uniform == -np.inf
+
+    def test_compound_prior_sample_shape(self, compound_prior):
+        rng = np.random.default_rng(42)
+        samples = compound_prior.sample(10, rng)
+        assert samples.shape == (10, compound_prior.n)
+
+    def test_compound_prior_sample_reproducibility(self, compound_prior):
+        rng1 = np.random.default_rng(2024)
+        rng2 = np.random.default_rng(2024)
+        samples1 = compound_prior.sample(5, rng1)
+        samples2 = compound_prior.sample(5, rng2)
+        np.testing.assert_array_equal(samples1, samples2)
