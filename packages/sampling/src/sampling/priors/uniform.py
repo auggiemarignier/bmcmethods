@@ -35,13 +35,15 @@ class UniformPrior:
         self.lower_bounds = lower_bounds
         self.upper_bounds = upper_bounds
         self._n = lower_bounds.size
+        self._volume = np.prod(upper_bounds - lower_bounds)
+        self._normalisation = -np.log(self._volume)
 
     def __call__(self, model_params: np.ndarray) -> float:
         """Uniform log-prior."""
         out_of_bounds = np.any(
             (model_params < self.lower_bounds) | (model_params > self.upper_bounds)
         )
-        return float(np.where(out_of_bounds, -np.inf, 0.0))
+        return -np.inf if out_of_bounds else self._normalisation
 
     def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
         """Sample from the Uniform prior.
@@ -73,6 +75,11 @@ class UniformPrior:
     def n(self) -> int:
         """Number of parameters in the Uniform prior."""
         return self._n
+
+    @property
+    def volume(self) -> float:
+        """Volume of the Uniform prior."""
+        return self._volume
 
 
 class UniformPriorComponentConfig:

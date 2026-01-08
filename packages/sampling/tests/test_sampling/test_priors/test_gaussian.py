@@ -42,13 +42,13 @@ def test_gaussian_config_params_expose_mean_and_covar() -> None:
 
 
 def test_gaussian_prior_at_mean() -> None:
-    """Test that log-prior is zero at the mean."""
+    """Test that log-prior is equal to the normalisation at the mean."""
     mean = np.array([1.0, 2.0, 3.0])
     covar = np.eye(3)
     prior_fn = GaussianPrior(mean, covar)
 
     log_prior = prior_fn(mean)
-    assert log_prior == 0.0
+    assert log_prior == prior_fn._normalisation
 
 
 def test_gaussian_prior_symmetric() -> None:
@@ -132,8 +132,8 @@ def test_gaussian_prior_diagonal_covariance() -> None:
     params[0] += np.sqrt(1 / inv_variances[0])
     log_prior = prior_fn(params)
 
-    # Expected: -0.5 * (1^2) = -0.5
-    np.testing.assert_allclose(log_prior, -0.5, rtol=1e-10)
+    # Expected: -0.5 * (1^2) + normalisation = -0.5 + normalisation
+    np.testing.assert_allclose(log_prior, -0.5 + prior_fn._normalisation, rtol=1e-10)
 
 
 def test_gaussian_prior_sample_shape() -> None:

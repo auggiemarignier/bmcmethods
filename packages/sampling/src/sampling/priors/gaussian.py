@@ -28,10 +28,15 @@ class GaussianPrior:
         self.inv_covar = inv_covar
         self._n = mean.size
 
+        self._normalisation = (
+            -0.5 * self._n * np.log(2 * np.pi)
+            + 0.5 * np.linalg.slogdet(self.inv_covar)[1]
+        )
+
     def __call__(self, model_params: np.ndarray) -> float:
         """Gaussian log-prior."""
         diff = model_params - self.mean
-        return float(-0.5 * diff.T @ self.inv_covar @ diff)
+        return float(-0.5 * diff.T @ self.inv_covar @ diff) + self._normalisation
 
     def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
         """Sample from the Gaussian prior.

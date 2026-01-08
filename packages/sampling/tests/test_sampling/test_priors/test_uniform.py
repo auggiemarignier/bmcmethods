@@ -136,7 +136,7 @@ def test_uniform_prior_different_ranges() -> None:
 
     # In bounds
     params_in = np.array([0.5, 0.0, 10.0])
-    assert prior_fn(params_in) == 0.0
+    assert prior_fn(params_in) == prior_fn._normalisation
 
     # Out of bounds in third dimension
     params_out = np.array([0.5, 0.0, 20.0])

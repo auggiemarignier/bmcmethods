@@ -57,7 +57,9 @@ def test_marginalise_log_prior_computation(
     test_point = np.array([1.0, 1.0])
 
     log_prior = marginalised_prior(test_point)
-    np.testing.assert_almost_equal(log_prior, expected_result)
+    np.testing.assert_almost_equal(
+        log_prior, expected_result + marginalised_prior._normalisation
+    )
 
 
 @pytest.mark.parametrize("fixture_name", ["gaussian_prior", "uniform_prior"])
@@ -138,7 +140,14 @@ def test_compound_prior_marginalisation() -> None:
     # test point 1 stdev away in Gaussian component, and within Uniform component
     test_point = np.array([1.0, 0.0])
 
-    expected_log_prior = -0.5 * (1.0**2) + 0.0  # Gaussian part + Uniform part
+    expected_log_prior = (
+        -0.5 * (1.0**2)
+        + 0.0
+        + sum(
+            component.prior_fn._normalisation
+            for component in marginalised_prior.prior_components
+        )
+    )  # Gaussian part + Uniform part
     log_prior = marginalised_prior(test_point)
     np.testing.assert_almost_equal(log_prior, expected_log_prior)
 
@@ -203,7 +212,10 @@ def test_compound_prior_marginalisation_skip_component() -> None:
     log_prior = marginalised_prior(test_point)
 
     expected_log_prior = (
-        -0.5 * (1.0**2) + 0.0
+        -0.5 * (1.0**2)
+        + 0.0
+        + marginalised_prior.prior_components[0].prior_fn._normalisation
+        + marginalised_prior.prior_components[1].prior_fn._normalisation
     )  # First Gaussian + second Gaussian at mean
     np.testing.assert_almost_equal(log_prior, expected_log_prior)
 

@@ -74,8 +74,13 @@ class TestCompoundPrior:
         )  # 1 stddev away from the mean of the gaussian prior and within uniform prior
         log_prior = compound_prior(model)
 
-        # Gaussian prior log-prob at [1.0, -1.0] is -1, uniform prior log-prob within bounds is 0
-        expected_log_prior = -1.0
+        # Gaussian prior log-prob at [1.0, -1.0] is -1, uniform prior log-prob within bounds is 0, plus normalisations
+        expected_log_prior = -1.0 + sum(
+            [
+                component.prior_fn._normalisation
+                for component in compound_prior.prior_components
+            ]
+        )
         np.testing.assert_almost_equal(log_prior, expected_log_prior)
 
     def test_compound_prior_invalid_model(self, compound_prior: CompoundPrior) -> None:
