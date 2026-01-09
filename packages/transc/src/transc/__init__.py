@@ -12,7 +12,7 @@ def get_relative_marginal_likelihoods(*args, walker_average="mean") -> FloatArra
     This is a wrapper around the `get_relative_marginal_likelihoods` function
     from the `pytransc.analysis.visits` module.
     """
-    visits = get_visits_to_states(*args)
+    visits, _ = get_visits_to_states(*args)
     return _grml(visits[-1], walker_average=walker_average)
 
 
