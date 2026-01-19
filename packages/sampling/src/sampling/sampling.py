@@ -45,7 +45,7 @@ class MCMCConfig:
 
 def mcmc(
     ndim: int,
-    likelihood: Callable[[np.ndarray], float],
+    likelihood: Callable[[np.ndarray], float | np.ndarray],
     prior: PriorFunction,
     rng: np.random.Generator,
     config: MCMCConfig | None = None,
@@ -56,10 +56,14 @@ def mcmc(
     ----------
     ndim : int
         Number of dimensions in the parameter space.
-    likelihood : Callable[[ndarray], float]
+    likelihood : Callable[[ndarray], float | ndarray]
         Likelihood function that takes model parameters and returns log-likelihood.
+        Should support both scalar (1D) and vectorised (2D batch) inputs if
+        config.vectorise is True.
     prior : PriorFunction
         Prior function that takes model parameters and returns log-prior.
+        Should support both scalar (1D) and vectorised (2D batch) inputs if
+        config.vectorise is True.
     rng : np.random.Generator
         Random number generator for initializing walkers.
     config : MCMCConfig or None, optional

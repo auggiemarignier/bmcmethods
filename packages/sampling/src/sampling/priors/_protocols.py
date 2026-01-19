@@ -28,8 +28,19 @@ class PriorFunction(Protocol):
     config_params: list[np.ndarray]
     n: int
 
-    def __call__(self, model_params: np.ndarray) -> float:
-        """Calculate the log-prior for given model parameters."""
+    def __call__(self, model_params: np.ndarray) -> float | np.ndarray:
+        """Calculate the log-prior for given model parameters.
+
+        Parameters
+        ----------
+        model_params : ndarray
+            Model parameters. Can be 1D for a single model or 2D for a batch.
+
+        Returns
+        -------
+        log_prior : float | ndarray
+            Log-prior value(s). Returns scalar for 1D input, array for 2D input.
+        """
 
     def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
         """Sample from the prior.
