@@ -49,6 +49,28 @@ class TestCompoundPrior:
         # Gaussian prior on first two parameters
         mean = np.array([0.0, 0.0])
         covar = np.eye(2)
+        gaussian_prior = GaussianPrior(mean, covar, vectorised=False)
+        gaussian_component = PriorComponent(
+            prior_fn=gaussian_prior, indices=[0, 1], vectorised=False
+        )
+
+        # Uniform prior on last two parameters
+        lower = np.array([-1.0, -1.0])
+        upper = np.array([1.0, 1.0])
+        uniform_prior = UniformPrior(lower, upper, vectorised=False)
+        uniform_component = PriorComponent(
+            prior_fn=uniform_prior, indices=[2, 3], vectorised=False
+        )
+
+        # Combine into compound prior
+        return CompoundPrior([gaussian_component, uniform_component], vectorised=False)
+
+    @pytest.fixture
+    def vectorised_compound_prior(self) -> CompoundPrior:
+        """Create a vectorised compound prior for testing."""
+        # Gaussian prior on first two parameters
+        mean = np.array([0.0, 0.0])
+        covar = np.eye(2)
         gaussian_prior = GaussianPrior(mean, covar)
         gaussian_component = PriorComponent(prior_fn=gaussian_prior, indices=[0, 1])
 
@@ -101,3 +123,95 @@ class TestCompoundPrior:
         samples1 = compound_prior.sample(5, rng1)
         samples2 = compound_prior.sample(5, rng2)
         np.testing.assert_array_equal(samples1, samples2)
+
+    def test_compound_prior_vectorised_single_model(self, vectorised_compound_prior):
+        """Test that vectorised evaluation works for a single model."""
+        model = np.array([[0.0, 0.0, 0.0, 0.0]])
+        log_priors = vectorised_compound_prior(model)
+
+        assert log_priors.shape == (1,)
+        assert np.isfinite(log_priors[0])
+
+    def test_compound_prior_vectorised_multiple_models(self, vectorised_compound_prior):
+        """Test that vectorised evaluation works for multiple models."""
+        models = np.array(
+            [
+                [0.0, 0.0, 0.0, 0.0],
+                [1.0, -1.0, 0.5, -0.5],
+                [0.5, 0.5, 0.25, 0.75],
+            ]
+        )
+        log_priors = vectorised_compound_prior(models)
+
+        assert log_priors.shape == (3,)
+        assert np.all(np.isfinite(log_priors))
+
+    def test_compound_prior_vectorised_mixed_valid_invalid(
+        self, vectorised_compound_prior
+    ):
+        """Test vectorised evaluation with some models out of bounds."""
+        models = np.array(
+            [
+                [0.0, 0.0, 0.0, 0.0],  # valid
+                [0.0, 0.0, 2.0, 0.0],  # out of uniform bounds
+                [1.0, 1.0, -0.5, -0.5],  # valid
+                [0.0, 0.0, -2.0, 0.0],  # out of uniform bounds
+            ]
+        )
+        log_priors = vectorised_compound_prior(models)
+
+        assert log_priors.shape == (4,)
+        assert np.isfinite(log_priors[0])
+        assert log_priors[1] == -np.inf
+        assert np.isfinite(log_priors[2])
+        assert log_priors[3] == -np.inf
+
+    def test_compound_prior_vectorised_consistent_with_individual_calls(self):
+        """Test that batched evaluation gives same results as individual calls."""
+        # Create both scalar and vectorised versions
+        mean = np.array([0.0, 0.0])
+        covar = np.eye(2)
+        lower = np.array([-1.0, -1.0])
+        upper = np.array([1.0, 1.0])
+
+        # Scalar version
+        gaussian_prior_scalar = GaussianPrior(mean, covar, vectorised=False)
+        uniform_prior_scalar = UniformPrior(lower, upper, vectorised=False)
+        scalar_compound = CompoundPrior(
+            [
+                PriorComponent(
+                    prior_fn=gaussian_prior_scalar, indices=[0, 1], vectorised=False
+                ),
+                PriorComponent(
+                    prior_fn=uniform_prior_scalar, indices=[2, 3], vectorised=False
+                ),
+            ],
+            vectorised=False,
+        )
+
+        # Vectorised version
+        gaussian_prior_vec = GaussianPrior(mean, covar)
+        uniform_prior_vec = UniformPrior(lower, upper)
+        vectorised_compound = CompoundPrior(
+            [
+                PriorComponent(prior_fn=gaussian_prior_vec, indices=[0, 1]),
+                PriorComponent(prior_fn=uniform_prior_vec, indices=[2, 3]),
+            ],
+        )
+
+        models = [
+            np.array([0.0, 0.0, 0.0, 0.0]),
+            np.array([1.0, -1.0, 0.5, -0.5]),
+            np.array([0.5, 0.5, 0.25, 0.75]),
+            np.array([0.1, 0.1, -0.8, 0.8]),
+        ]
+
+        # Individual calls
+        individual_results = np.array([scalar_compound(m) for m in models])
+
+        # Batched call
+        batched_models = np.array(models)
+        batched_results = vectorised_compound(batched_models)
+
+        assert batched_results.shape == (4,)
+        np.testing.assert_allclose(individual_results, batched_results)

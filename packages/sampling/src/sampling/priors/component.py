@@ -22,10 +22,14 @@ class PriorComponent:
         Prior function that takes model parameters and returns the log-prior.
     indices : Sequence[int] | slice | np.ndarray
         Indices of the model parameters that this prior component applies to.
+    vectorised : bool, optional
+        If True, the prior function expects batched inputs (shape (batch_size, n)).
+        If False, expects single model inputs (shape (n,)). Default is True.
     """
 
     prior_fn: PriorFunction
     indices: InitVar[Sequence[int] | slice | np.ndarray]
+    vectorised: bool = True
 
     _indices: np.ndarray = field(default_factory=lambda: np.array([]))
 

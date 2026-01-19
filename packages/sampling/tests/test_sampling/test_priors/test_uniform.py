@@ -22,6 +22,12 @@ def upper() -> np.ndarray:
 @pytest.fixture
 def valid_uniform_prior(lower: np.ndarray, upper: np.ndarray) -> UniformPrior:
     """Create a valid uniform prior function for testing."""
+    return UniformPrior(lower, upper, vectorised=False)
+
+
+@pytest.fixture
+def vectorised_uniform_prior(lower: np.ndarray, upper: np.ndarray) -> UniformPrior:
+    """Create a valid vectorised uniform prior function for testing."""
     return UniformPrior(lower, upper)
 
 
@@ -116,7 +122,7 @@ def test_uniform_prior_invalid_bounds() -> None:
     upper = np.array([1.0, 0.5])  # Second bound is invalid
 
     with pytest.raises(ValueError, match="lower bound must be less than"):
-        UniformPrior(lower, upper)
+        UniformPrior(lower, upper, vectorised=False)
 
 
 def test_uniform_prior_equal_bounds() -> None:
@@ -125,14 +131,14 @@ def test_uniform_prior_equal_bounds() -> None:
     upper = np.array([1.0, 1.0])  # Second bound is equal
 
     with pytest.raises(ValueError, match="lower bound must be less than"):
-        UniformPrior(lower, upper)
+        UniformPrior(lower, upper, vectorised=False)
 
 
 def test_uniform_prior_different_ranges() -> None:
     """Test uniform prior with different ranges per dimension."""
     lower = np.array([0.0, -10.0, 5.0])
     upper = np.array([1.0, 10.0, 15.0])
-    prior_fn = UniformPrior(lower, upper)
+    prior_fn = UniformPrior(lower, upper, vectorised=False)
 
     # In bounds
     params_in = np.array([0.5, 0.0, 10.0])
@@ -148,7 +154,7 @@ def test_uniform_prior_high_dimensional() -> None:
     n_dims = 10
     lower = np.zeros(n_dims)
     upper = np.ones(n_dims)
-    prior_fn = UniformPrior(lower, upper)
+    prior_fn = UniformPrior(lower, upper, vectorised=False)
 
     # All in bounds
     params_in = np.full(n_dims, 0.5)
@@ -181,3 +187,82 @@ def test_uniform_prior_sample_reproducibility(
     samples1 = valid_uniform_prior.sample(5, rng1)
     samples2 = valid_uniform_prior.sample(5, rng2)
     np.testing.assert_array_equal(samples1, samples2)
+
+
+def test_uniform_prior_vectorised_single_model(
+    vectorised_uniform_prior: UniformPrior,
+) -> None:
+    """Test that vectorised evaluation works for a single model."""
+    params = np.array([[0.5, 0.5]])
+    log_priors = vectorised_uniform_prior(params)
+
+    assert log_priors.shape == (1,)
+    assert log_priors[0] == vectorised_uniform_prior._normalisation
+
+
+def test_uniform_prior_vectorised_multiple_models(
+    vectorised_uniform_prior: UniformPrior,
+) -> None:
+    """Test that vectorised evaluation works for multiple models."""
+    params = np.array(
+        [
+            [0.5, 0.5],
+            [0.25, 0.75],
+            [0.0, 1.0],
+        ]
+    )
+    log_priors = vectorised_uniform_prior(params)
+
+    assert log_priors.shape == (3,)
+    np.testing.assert_array_equal(
+        log_priors,
+        [vectorised_uniform_prior._normalisation] * 3,
+    )
+
+
+def test_uniform_prior_vectorised_mixed_bounds(
+    vectorised_uniform_prior: UniformPrior,
+) -> None:
+    """Test vectorised evaluation with some models in and out of bounds."""
+    params = np.array(
+        [
+            [0.5, 0.5],  # in bounds
+            [-0.1, 0.5],  # out of bounds (below)
+            [0.5, 1.1],  # out of bounds (above)
+            [0.0, 0.0],  # at lower boundary
+            [1.0, 1.0],  # at upper boundary
+        ]
+    )
+    log_priors = vectorised_uniform_prior(params)
+
+    assert log_priors.shape == (5,)
+    assert log_priors[0] == vectorised_uniform_prior._normalisation
+    assert log_priors[1] == -np.inf
+    assert log_priors[2] == -np.inf
+    assert log_priors[3] == vectorised_uniform_prior._normalisation
+    assert log_priors[4] == vectorised_uniform_prior._normalisation
+
+
+def test_uniform_prior_vectorised_consistent_with_individual_calls(
+    lower: np.ndarray, upper: np.ndarray
+) -> None:
+    """Test that batched evaluation gives same results as individual calls."""
+    scalar_prior = UniformPrior(lower, upper, vectorised=False)
+    vectorised_prior = UniformPrior(lower, upper)
+
+    models = [
+        np.array([0.5, 0.5]),
+        np.array([0.25, 0.75]),
+        np.array([0.0, 1.0]),
+        np.array([0.1, 0.9]),
+    ]
+
+    # Individual calls
+    individual_results = np.array([scalar_prior(m) for m in models])
+
+    # Batched call
+    batched_models = np.array(models)
+    batched_results = vectorised_prior(batched_models)
+
+    assert batched_results.shape == (4,)
+    np.testing.assert_array_equal(individual_results, batched_results)

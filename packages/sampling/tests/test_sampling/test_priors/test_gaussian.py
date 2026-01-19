@@ -9,7 +9,7 @@ def test_gaussian_prior_n() -> None:
     """Test that Gaussian prior has correct number of parameters."""
     mean = np.array([1.0, 2.0, 3.0])
     covar = np.eye(3)
-    prior_fn = GaussianPrior(mean, covar)
+    prior_fn = GaussianPrior(mean, covar, vectorised=False)
     assert prior_fn.n == 3
 
 
@@ -23,7 +23,7 @@ def test_gaussian_config_params_expose_mean_and_covar() -> None:
             [0.0, 0.2, 3.0],
         ]
     )
-    prior = GaussianPrior(mean, covar)
+    prior = GaussianPrior(mean, covar, vectorised=False)
     assert isinstance(prior, GaussianPrior)
 
     cfg = prior.config_params
@@ -45,7 +45,7 @@ def test_gaussian_prior_at_mean() -> None:
     """Test that log-prior is equal to the normalisation at the mean."""
     mean = np.array([1.0, 2.0, 3.0])
     covar = np.eye(3)
-    prior_fn = GaussianPrior(mean, covar)
+    prior_fn = GaussianPrior(mean, covar, vectorised=False)
 
     log_prior = prior_fn(mean)
     assert log_prior == prior_fn._normalisation
@@ -55,7 +55,7 @@ def test_gaussian_prior_symmetric() -> None:
     """Test that log-prior is symmetric around the mean."""
     mean = np.array([0.0, 0.0])
     covar = np.eye(2)
-    prior_fn = GaussianPrior(mean, covar)
+    prior_fn = GaussianPrior(mean, covar, vectorised=False)
 
     delta = np.array([1.0, 1.0])
     log_prior_plus = prior_fn(mean + delta)
@@ -68,7 +68,7 @@ def test_gaussian_prior_decreases_with_distance() -> None:
     """Test that log-prior decreases as we move away from the mean."""
     mean = np.array([0.0, 0.0])
     covar = np.eye(2)
-    prior_fn = GaussianPrior(mean, covar)
+    prior_fn = GaussianPrior(mean, covar, vectorised=False)
 
     close = np.array([0.1, 0.1])
     far = np.array([1.0, 1.0])
@@ -83,7 +83,7 @@ def test_gaussian_prior_with_correlation() -> None:
     """Test Gaussian prior with correlated covariance."""
     mean = np.array([0.0, 0.0])
     covar = np.array([[1.0, 0.5], [0.5, 1.0]])
-    prior_fn = GaussianPrior(mean, covar)
+    prior_fn = GaussianPrior(mean, covar, vectorised=False)
 
     params = np.array([1.0, 1.0])
     log_prior = prior_fn(params)
@@ -99,7 +99,7 @@ def test_gaussian_prior_invalid_non_symmetric_covariance() -> None:
     covar = np.array([[1.0, 0.5], [0.3, 1.0]])  # Non-symmetric
 
     with pytest.raises(ValueError, match="symmetric"):
-        GaussianPrior(mean, covar)
+        GaussianPrior(mean, covar, vectorised=False)
 
 
 def test_gaussian_prior_invalid_negative_eigenvalue() -> None:
@@ -108,7 +108,7 @@ def test_gaussian_prior_invalid_negative_eigenvalue() -> None:
     covar = np.array([[1.0, 2.0], [2.0, 1.0]])  # Not positive semidefinite
 
     with pytest.raises(ValueError, match="positive semidefinite"):
-        GaussianPrior(mean, covar)
+        GaussianPrior(mean, covar, vectorised=False)
 
 
 def test_gaussian_prior_invalid_shape_mismatch() -> None:
@@ -117,7 +117,7 @@ def test_gaussian_prior_invalid_shape_mismatch() -> None:
     covar = np.eye(3)  # Wrong size
 
     with pytest.raises(ValueError, match="shape"):
-        GaussianPrior(mean, covar)
+        GaussianPrior(mean, covar, vectorised=False)
 
 
 def test_gaussian_prior_diagonal_covariance() -> None:
@@ -125,7 +125,7 @@ def test_gaussian_prior_diagonal_covariance() -> None:
     mean = np.array([1.0, 2.0, 3.0])
     inv_variances = np.array([0.5, 1.0, 2.0])
     inv_covar = np.diag(inv_variances)
-    prior_fn = GaussianPrior(mean, inv_covar)
+    prior_fn = GaussianPrior(mean, inv_covar, vectorised=False)
 
     # Test a point one standard deviation away in first dimension
     params = mean.copy()
@@ -139,7 +139,7 @@ def test_gaussian_prior_diagonal_covariance() -> None:
 def test_gaussian_prior_sample_shape() -> None:
     mean = np.array([0.0, 0.0])
     covar = np.eye(2)
-    prior = GaussianPrior(mean, covar)
+    prior = GaussianPrior(mean, covar, vectorised=False)
     rng = np.random.default_rng(42)
     samples = prior.sample(10, rng)
     assert samples.shape == (10, 2)
@@ -148,7 +148,7 @@ def test_gaussian_prior_sample_shape() -> None:
 def test_gaussian_prior_sample_mean() -> None:
     mean = np.array([1.0, -1.0])
     covar = np.eye(2)
-    prior = GaussianPrior(mean, covar)
+    prior = GaussianPrior(mean, covar, vectorised=False)
     rng = np.random.default_rng(123)
     samples = prior.sample(1000, rng)
     sample_mean = np.mean(samples, axis=0)
@@ -158,9 +158,115 @@ def test_gaussian_prior_sample_mean() -> None:
 def test_gaussian_prior_sample_reproducibility() -> None:
     mean = np.array([0.0, 0.0])
     covar = np.eye(2)
-    prior = GaussianPrior(mean, covar)
+    prior = GaussianPrior(mean, covar, vectorised=False)
     rng1 = np.random.default_rng(2024)
     rng2 = np.random.default_rng(2024)
     samples1 = prior.sample(5, rng1)
     samples2 = prior.sample(5, rng2)
     np.testing.assert_array_equal(samples1, samples2)
+
+
+def test_gaussian_prior_vectorised_single_model() -> None:
+    """Test that vectorised evaluation works for a single model."""
+    mean = np.array([0.0, 0.0])
+    inv_covar = np.eye(2)
+    prior = GaussianPrior(mean, inv_covar)
+
+    params = np.array([[0.0, 0.0]])
+    log_priors = prior(params)
+
+    assert log_priors.shape == (1,)
+    assert log_priors[0] == prior._normalisation
+
+
+def test_gaussian_prior_vectorised_multiple_models() -> None:
+    """Test that vectorised evaluation works for multiple models."""
+    mean = np.array([0.0, 0.0])
+    inv_covar = np.eye(2)
+    prior = GaussianPrior(mean, inv_covar)
+
+    params = np.array(
+        [
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 1.0],
+        ]
+    )
+    log_priors = prior(params)
+
+    assert log_priors.shape == (4,)
+    # At mean: normalisation
+    assert log_priors[0] == prior._normalisation
+    # One sigma away: normalisation - 0.5
+    np.testing.assert_allclose(log_priors[1], prior._normalisation - 0.5)
+    np.testing.assert_allclose(log_priors[2], prior._normalisation - 0.5)
+    # sqrt(2) sigma away: normalisation - 1.0
+    np.testing.assert_allclose(log_priors[3], prior._normalisation - 1.0)
+
+
+def test_gaussian_prior_vectorised_symmetry() -> None:
+    """Test that vectorised evaluation maintains symmetry."""
+    mean = np.array([0.0, 0.0])
+    inv_covar = np.eye(2)
+    prior = GaussianPrior(mean, inv_covar)
+
+    delta = np.array([1.0, 1.0])
+    params = np.array(
+        [
+            mean + delta,
+            mean - delta,
+        ]
+    )
+    log_priors = prior(params)
+
+    assert log_priors.shape == (2,)
+    np.testing.assert_allclose(log_priors[0], log_priors[1])
+
+
+def test_gaussian_prior_vectorised_with_correlation() -> None:
+    """Test vectorised evaluation with correlated covariance."""
+    mean = np.array([0.0, 0.0])
+    inv_covar = np.array([[2.0, -1.0], [-1.0, 2.0]])
+    prior = GaussianPrior(mean, inv_covar)
+
+    params = np.array(
+        [
+            [0.0, 0.0],
+            [1.0, 1.0],
+            [1.0, -1.0],
+        ]
+    )
+    log_priors = prior(params)
+
+    assert log_priors.shape == (3,)
+    assert np.all(np.isfinite(log_priors))
+    # At mean should be highest
+    assert log_priors[0] > log_priors[1]
+    assert log_priors[0] > log_priors[2]
+
+
+def test_gaussian_prior_vectorised_consistent_with_individual_calls() -> None:
+    """Test that batched evaluation gives same results as individual calls."""
+    mean = np.array([0.0, 0.0])
+    inv_covar = np.eye(2)
+    scalar_prior = GaussianPrior(mean, inv_covar, vectorised=False)
+    vectorised_prior = GaussianPrior(mean, inv_covar)
+
+    models = [
+        np.array([0.0, 0.0]),
+        np.array([1.0, 0.0]),
+        np.array([0.0, 1.0]),
+        np.array([1.0, 1.0]),
+        np.array([-0.5, 0.5]),
+    ]
+
+    # Individual calls
+    individual_results = np.array([scalar_prior(m) for m in models])
+
+    # Batched call
+    batched_models = np.array(models)
+    batched_results = vectorised_prior(batched_models)
+
+    assert batched_results.shape == (5,)
+    np.testing.assert_allclose(individual_results, batched_results)
