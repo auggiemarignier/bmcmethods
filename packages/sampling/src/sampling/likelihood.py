@@ -11,6 +11,9 @@ class GaussianLikelihood:
 
     The Gaussian likelihood assumes that the observed data is normally distributed
     around the model predictions, with a specified inverse covariance matrix.
+
+    This implementation is fully vectorised and handles both single parameter
+    evaluation and batch evaluation transparently.
     """
 
     def __init__(
@@ -18,21 +21,25 @@ class GaussianLikelihood:
         forward_fn: Callable[[np.ndarray], np.ndarray],
         observed_data: np.ndarray,
         inv_covar: float | np.ndarray,
+        vectorised: bool = True,
         validate_covariance: bool = True,
         example_model: None | np.ndarray = None,
     ) -> None:
         """
-        Initialize the Gaussian likelihood.
+        Initialise the Gaussian likelihood.
 
         Parameters
         ----------
         forward_fn : Callable[[np.ndarray], np.ndarray]
             Forward model function that takes model parameters and returns predicted data.
+            Should accept shape (..., ndim) and return shape (..., n).
         observed_data : ndarray, shape (n,)
             Observed data.
         inv_covar : float | ndarray, shape (1,), (n,) or (n, n)
             Inverse covariance matrix of the observed data. Either a full matrix of shape (n, n),
             a diagonal represented as a vector of shape (n,), or a scalar representing uniform variance.
+        vectorised : bool, optional
+            Whether the forward function is vectorised. Default is True.
         validate_covariance : bool, optional
             Whether to validate the inverse covariance matrix. Default is True.
         example_model : None | ndarray, optional
@@ -53,32 +60,42 @@ class GaussianLikelihood:
         self.observed_data = observed_data
         self.inv_covar = np.array(inv_covar)
         self._exp_term_fn = self._choose_exponential_term_function()
+        self._call_fn = self._call_vectorised if vectorised else self._call_scalar
 
-    def __call__(self, model_params: np.ndarray) -> float:
+    def __call__(self, model_params: np.ndarray) -> float | np.ndarray:
         """
         Evaluate the log-likelihood for given model parameters.
 
         Parameters
         ----------
-        model_params : ndarray
-            Model parameters.
+        model_params : ndarray, shape (ndim,) or (batch, ndim)
+            Model parameters. Can be a single parameter set or a batch.
 
         Returns
         -------
-        log_likelihood : float
-            The log-likelihood value.
+        log_likelihood : float | ndarray
+            The log-likelihood value(s). Returns a scalar if input is 1D,
+            or an array of shape (batch,) if input is 2D.
         """
-        predicted_data = self.forward_fn(model_params)
-        residual = self.observed_data - predicted_data
-        return self._exp_term_fn(residual)
+        return self._call_fn(model_params)
 
-    def _choose_exponential_term_function(self) -> Callable[[np.ndarray], float]:
+    def _call_scalar(self, model_params: np.ndarray) -> float:
+        predicted = self.forward_fn(model_params[None, :])
+        residuals = self.observed_data[None, :] - predicted  # (1, n)
+        return self._exp_term_fn(residuals)[0]
+
+    def _call_vectorised(self, model_params: np.ndarray) -> np.ndarray:
+        predicted = self.forward_fn(model_params)  # (batch, n)
+        residuals = self.observed_data[None, :] - predicted  # (batch, n)
+        return self._exp_term_fn(residuals)
+
+    def _choose_exponential_term_function(self) -> Callable[[np.ndarray], np.ndarray]:
         """
         Choose the appropriate exponential term computation function based on the shape of the inverse covariance matrix.
 
         Returns
         -------
-        exp_term_fn : Callable[[ndarray], float]
+        exp_term_fn : Callable[[ndarray], ndarray]
             Function to compute the exponential term of the Gaussian likelihood.
         """
         if self.inv_covar.ndim == 2:
@@ -90,53 +107,54 @@ class GaussianLikelihood:
         else:
             raise ValueError("Invalid shape for inverse covariance matrix.")
 
-    def _exponential_term_full(self, residual: np.ndarray) -> float:
+    def _exponential_term_full(self, residuals: np.ndarray) -> np.ndarray:
         """
         Compute the exponential term of the Gaussian likelihood for a full covariance matrix.
 
         Parameters
         ----------
-        residual : ndarray, shape (n,)
-            Residual vector (observed_data - predicted_data).
+        residuals : ndarray, shape (batch, n)
+            Residual vectors (observed_data - predicted_data).
 
         Returns
         -------
-        exp_term : float
-            The exponential term value.
+        exp_term : ndarray, shape (batch,)
+            The exponential term values.
         """
-        return -0.5 * residual.T @ self.inv_covar @ residual
+        # Doing it this way avoids computing the full (batch x batch) matrix of residuals @ inv_covar @ residuals.T and then discarding all the off-diagonal terms
+        return -0.5 * np.sum((residuals @ self.inv_covar) * residuals, axis=1)
 
-    def _exponential_term_diagonal(self, residual: np.ndarray) -> float:
+    def _exponential_term_diagonal(self, residuals: np.ndarray) -> np.ndarray:
         """
         Compute the exponential term of the Gaussian likelihood for a diagonal covariance matrix.
 
         Parameters
         ----------
-        residual : ndarray, shape (n,)
-            Residual vector (observed_data - predicted_data).
+        residuals : ndarray, shape (batch, n)
+            Residual vectors (observed_data - predicted_data).
 
         Returns
         -------
-        exp_term : float
-            The exponential term value.
+        exp_term : ndarray, shape (batch,)
+            The exponential term values.
         """
-        return -0.5 * np.sum(residual**2 * self.inv_covar)
+        return -0.5 * np.sum(residuals**2 * self.inv_covar[None, :], axis=1)
 
-    def _exponential_term_scalar(self, residual: np.ndarray) -> float:
+    def _exponential_term_scalar(self, residuals: np.ndarray) -> np.ndarray:
         """
         Compute the exponential term of the Gaussian likelihood for a scalar covariance.
 
         Parameters
         ----------
-        residual : ndarray, shape (n,)
-            Residual vector (observed_data - predicted_data).
+        residuals : ndarray, shape (batch, n)
+            Residual vectors (observed_data - predicted_data).
 
         Returns
         -------
-        exp_term : float
-            The exponential term value.
+        exp_term : ndarray, shape (batch,)
+            The exponential term values.
         """
-        return -0.5 * np.sum(residual**2) * self.inv_covar[0]
+        return -0.5 * np.sum(residuals**2, axis=1) * self.inv_covar[0]
 
 
 def _validate_data_vector(data: np.ndarray) -> None:
@@ -222,6 +240,9 @@ def _validate_forward_function(
     ValueError
         If the forward function does not return data of the correct shape.
     """
-    predicted_data = forward_fn(example_model)
-    if predicted_data.shape != (N,):
-        raise ValueError(f"Forward function must return prediction of shape ({N},).")
+    example_batch = example_model[None, :]
+    predicted_data = forward_fn(example_batch)
+    if predicted_data.shape != (1, N):
+        raise ValueError(
+            f"Forward function must return prediction of shape (batch, {N})."
+        )
