@@ -24,10 +24,10 @@ class MCMCConfig:
         Number of MCMC steps.
     burn_in : int
         Number of burn-in steps to discard.
-    initial_from_prior : bool
-        Whether to initialize walkers from the prior distribution.
+    vectorise : bool
+        Whether to vectorize the likelihood and prior evaluations.
     parallel : bool
-        Whether to use parallel processing.
+        Whether to use parallel processing. Ignored if vectorise is True.
     progress : bool
         Whether to display a progress bar.
     thin : int
@@ -37,9 +37,9 @@ class MCMCConfig:
     nwalkers: int = 50
     nsteps: int = 1000
     burn_in: int = 200
-    initial_from_prior: bool = False  # Haven't implemented this yet
+    vectorise: bool = True
     parallel: bool = False
-    progress: bool = True
+    progress: bool = False
     thin: int = 1
 
 
@@ -78,10 +78,15 @@ def mcmc(
     initial_pos = prior.sample(config.nwalkers, rng)
 
     posterior = Posterior(likelihood, prior)
-    p = Pool if config.parallel else DummyPool
 
-    with p() as pool:
-        sampler = EnsembleSampler(config.nwalkers, ndim, posterior, pool=pool)
+    _pool = DummyPool
+    if config.parallel and not config.vectorise:
+        _pool = Pool
+
+    with _pool() as pool:
+        sampler = EnsembleSampler(
+            config.nwalkers, ndim, posterior, pool=pool, vectorize=config.vectorise
+        )
         sampler.run_mcmc(initial_pos, config.nsteps, progress=config.progress)
 
     return _burn_and_thin_sampler(sampler, config.burn_in, config.thin)
