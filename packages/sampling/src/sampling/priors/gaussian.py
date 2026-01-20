@@ -37,7 +37,7 @@ class GaussianPrior:
             -0.5 * self._n * np.log(2 * np.pi)
             + 0.5 * np.linalg.slogdet(self.inv_covar)[1]
         )
-        self._call_fn = self.callvectorised if vectorised else self.callsingle
+        self._call_fn = self._call_vectorised if vectorised else self._call_single
 
     def __call__(self, model_params: np.ndarray) -> float | np.ndarray:
         """Gaussian log-prior.
@@ -56,12 +56,12 @@ class GaussianPrior:
         """
         return self._call_fn(model_params)
 
-    def callsingle(self, model_params: np.ndarray) -> float:
+    def _call_single(self, model_params: np.ndarray) -> float:
         """Gaussian log-prior for a single model."""
         diff = model_params - self.mean
         return float(-0.5 * diff.T @ self.inv_covar @ diff) + self._normalisation
 
-    def callvectorised(self, model_params: np.ndarray) -> np.ndarray:
+    def _call_vectorised(self, model_params: np.ndarray) -> np.ndarray:
         """Gaussian log-prior for a batch of models.
 
         Parameters

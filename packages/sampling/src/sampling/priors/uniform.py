@@ -45,7 +45,7 @@ class UniformPrior:
         self._n = lower_bounds.size
         self._volume = np.prod(upper_bounds - lower_bounds)
         self._normalisation = -np.log(self._volume)
-        self._call_fn = self.callvectorised if vectorised else self.callsingle
+        self._call_fn = self._call_vectorised if vectorised else self._call_single
 
     def __call__(self, model_params: np.ndarray) -> float | np.ndarray:
         """Uniform log-prior.
@@ -64,14 +64,14 @@ class UniformPrior:
         """
         return self._call_fn(model_params)
 
-    def callsingle(self, model_params: np.ndarray) -> float:
+    def _call_single(self, model_params: np.ndarray) -> float:
         """Uniform log-prior for a single model."""
         out_of_bounds = np.any(
             (model_params < self.lower_bounds) | (model_params > self.upper_bounds)
         )
         return -np.inf if out_of_bounds else self._normalisation
 
-    def callvectorised(self, model_params: np.ndarray) -> np.ndarray:
+    def _call_vectorised(self, model_params: np.ndarray) -> np.ndarray:
         """Uniform log-prior for a batch of models.
 
         Parameters

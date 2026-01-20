@@ -65,7 +65,7 @@ class CompoundPrior:
         self._non_uniform_components = [
             c for c in prior_components if not isinstance(c.prior_fn, UniformPrior)
         ]
-        self._call_fn = self.callvectorised if vectorised else self.callsingle
+        self._call_fn = self._call_vectorised if vectorised else self._call_single
 
     def __call__(self, model_params: np.ndarray) -> float | np.ndarray:
         """Compound log-prior.
@@ -84,7 +84,7 @@ class CompoundPrior:
         """
         return self._call_fn(model_params)
 
-    def callsingle(self, model_params: np.ndarray) -> float:
+    def _call_single(self, model_params: np.ndarray) -> float:
         """Compound log-prior for a single model."""
         # Bring any UniformPriors to the front for early exit
         prior_components = chain(self._uniform_components, self._non_uniform_components)
@@ -100,7 +100,7 @@ class CompoundPrior:
             total_log_prior += component_log_prior
         return total_log_prior
 
-    def callvectorised(self, model_params: np.ndarray) -> np.ndarray:
+    def _call_vectorised(self, model_params: np.ndarray) -> np.ndarray:
         """Compound log-prior for a batch of models.
 
         Parameters
