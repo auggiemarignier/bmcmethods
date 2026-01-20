@@ -39,7 +39,7 @@ class MCMCConfig:
     burn_in: int = 200
     vectorise: bool = True
     parallel: bool = False
-    progress: bool = False
+    progress: bool = True
     thin: int = 1
 
 
