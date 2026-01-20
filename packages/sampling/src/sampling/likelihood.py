@@ -39,7 +39,9 @@ class GaussianLikelihood:
             Inverse covariance matrix of the observed data. Either a full matrix of shape (n, n),
             a diagonal represented as a vector of shape (n,), or a scalar representing uniform variance.
         vectorised : bool, optional
-            Whether the forward function is vectorised. Default is True.
+            If True, the likelihood ``__call__`` method expects batched model parameters of shape ``(batch, ndim)``;
+            if False, it expects a single parameter vector of shape ``(ndim,)``. Note that ``forward_fn`` must always
+            accept batched inputs of shape ``(..., ndim)`` and return outputs of shape ``(..., n)``. Default is True.
         validate_covariance : bool, optional
             Whether to validate the inverse covariance matrix. Default is True.
         example_model : None | ndarray, optional
