@@ -24,10 +24,10 @@ class MCMCConfig:
         Number of MCMC steps.
     burn_in : int
         Number of burn-in steps to discard.
-    initial_from_prior : bool
-        Whether to initialize walkers from the prior distribution.
+    vectorise : bool
+        Whether to vectorize the likelihood and prior evaluations.
     parallel : bool
-        Whether to use parallel processing.
+        Whether to use parallel processing. Ignored if vectorise is True.
     progress : bool
         Whether to display a progress bar.
     thin : int
@@ -37,7 +37,7 @@ class MCMCConfig:
     nwalkers: int = 50
     nsteps: int = 1000
     burn_in: int = 200
-    initial_from_prior: bool = False  # Haven't implemented this yet
+    vectorise: bool = True
     parallel: bool = False
     progress: bool = True
     thin: int = 1
@@ -45,7 +45,7 @@ class MCMCConfig:
 
 def mcmc(
     ndim: int,
-    likelihood: Callable[[np.ndarray], float],
+    likelihood: Callable[[np.ndarray], float | np.ndarray],
     prior: PriorFunction,
     rng: np.random.Generator,
     config: MCMCConfig | None = None,
@@ -56,10 +56,14 @@ def mcmc(
     ----------
     ndim : int
         Number of dimensions in the parameter space.
-    likelihood : Callable[[ndarray], float]
+    likelihood : Callable[[ndarray], float | ndarray]
         Likelihood function that takes model parameters and returns log-likelihood.
+        Should support both scalar (1D) and vectorised (2D batch) inputs if
+        config.vectorise is True.
     prior : PriorFunction
         Prior function that takes model parameters and returns log-prior.
+        Should support both scalar (1D) and vectorised (2D batch) inputs if
+        config.vectorise is True.
     rng : np.random.Generator
         Random number generator for initializing walkers.
     config : MCMCConfig or None, optional
@@ -78,10 +82,15 @@ def mcmc(
     initial_pos = prior.sample(config.nwalkers, rng)
 
     posterior = Posterior(likelihood, prior)
-    p = Pool if config.parallel else DummyPool
 
-    with p() as pool:
-        sampler = EnsembleSampler(config.nwalkers, ndim, posterior, pool=pool)
+    _pool = DummyPool
+    if config.parallel and not config.vectorise:
+        _pool = Pool
+
+    with _pool() as pool:
+        sampler = EnsembleSampler(
+            config.nwalkers, ndim, posterior, pool=pool, vectorize=config.vectorise
+        )
         sampler.run_mcmc(initial_pos, config.nsteps, progress=config.progress)
 
     return _burn_and_thin_sampler(sampler, config.burn_in, config.thin)

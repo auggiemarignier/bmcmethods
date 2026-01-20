@@ -15,6 +15,9 @@ class GaussianPrior:
         Mean of the Gaussian prior e.g. a reference model.
     inv_covar : ndarray, shape (n, n)
         Inverse Covariance matrix of the Gaussian prior.
+    vectorised : bool, optional
+        If True, the prior can evaluate batches of models (shape (batch_size, n)).
+        If False, evaluates single models (shape (n,)). Default is True.
 
     Raises
     ------
@@ -22,7 +25,9 @@ class GaussianPrior:
         If the inverse covariance matrix is not symmetric, not positive semidefinite, or has a shape mismatch with the mean.
     """
 
-    def __init__(self, mean: np.ndarray, inv_covar: np.ndarray) -> None:
+    def __init__(
+        self, mean: np.ndarray, inv_covar: np.ndarray, vectorised: bool = True
+    ) -> None:
         _validate_covariance_matrix(inv_covar, mean.size)
         self.mean = mean
         self.inv_covar = inv_covar
@@ -32,11 +37,50 @@ class GaussianPrior:
             -0.5 * self._n * np.log(2 * np.pi)
             + 0.5 * np.linalg.slogdet(self.inv_covar)[1]
         )
+        self._call_fn = self._call_vectorised if vectorised else self._call_single
 
-    def __call__(self, model_params: np.ndarray) -> float:
-        """Gaussian log-prior."""
+    def __call__(self, model_params: np.ndarray) -> float | np.ndarray:
+        """Gaussian log-prior.
+
+        Parameters
+        ----------
+        model_params : ndarray
+            If vectorised=False: shape (n,) for single model evaluation.
+            If vectorised=True: shape (batch_size, n) for batch evaluation.
+
+        Returns
+        -------
+        float or ndarray
+            If vectorised=False: scalar log-prior value.
+            If vectorised=True: array of shape (batch_size,) with log-prior values.
+        """
+        return self._call_fn(model_params)
+
+    def _call_single(self, model_params: np.ndarray) -> float:
+        """Gaussian log-prior for a single model."""
         diff = model_params - self.mean
         return float(-0.5 * diff.T @ self.inv_covar @ diff) + self._normalisation
+
+    def _call_vectorised(self, model_params: np.ndarray) -> np.ndarray:
+        """Gaussian log-prior for a batch of models.
+
+        Parameters
+        ----------
+        model_params : ndarray, shape (batch_size, n)
+            Batch of model parameters.
+
+        Returns
+        -------
+        log_priors : ndarray, shape (batch_size,)
+            Log-prior values for each model.
+        """
+        diff = model_params - self.mean  # shape (batch_size, n)
+        # Compute quadratic form for each model: diff @ inv_covar @ diff.T
+        # More efficient: (diff @ inv_covar * diff).sum(axis=1)
+        log_priors = (
+            -0.5 * np.sum(diff @ self.inv_covar * diff, axis=1) + self._normalisation
+        )
+        return log_priors
 
     def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
         """Sample from the Gaussian prior.
@@ -112,15 +156,21 @@ class GaussianPriorComponentConfig:
         mean: list[float] | np.ndarray,
         inv_covar: list[list[float]] | np.ndarray,
         indices: list[int],
+        vectorised: bool = True,
     ) -> None:
         self.mean = mean
         self.inv_covar = inv_covar
         self.indices = indices
+        self.vectorised = vectorised
 
     def to_prior_component(self) -> PriorComponent:
         """Build a PriorComponent from this config."""
         mean = np.asarray(self.mean)
         inv_covar = np.asarray(self.inv_covar)
-        prior_fn = GaussianPrior(mean=mean, inv_covar=inv_covar)
+        prior_fn = GaussianPrior(
+            mean=mean, inv_covar=inv_covar, vectorised=self.vectorised
+        )
 
-        return PriorComponent(prior_fn=prior_fn, indices=self.indices)
+        return PriorComponent(
+            prior_fn=prior_fn, indices=self.indices, vectorised=self.vectorised
+        )

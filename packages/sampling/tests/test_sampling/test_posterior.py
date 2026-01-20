@@ -10,12 +10,18 @@ from sddr.marginalisation import marginalise_samples
 
 def _dummy_likelihood_fn(params):
     """Dummy likelihood function for pickling test."""
-    return -0.5 * np.sum(params**2)
+    if params.ndim == 1:
+        return -0.5 * np.sum(params**2)
+    else:
+        return -0.5 * np.sum(params**2, axis=1)
 
 
 def _dummy_prior_fn(params):
     """Dummy prior function for pickling test."""
-    return -np.sum(np.abs(params))
+    if params.ndim == 1:
+        return -np.sum(np.abs(params))
+    else:
+        return -np.sum(np.abs(params), axis=1)
 
 
 def test_posterior():
@@ -40,6 +46,52 @@ def test_posterior_picklable():
     unpickled = pickle.loads(pickled)
     params = np.array([0.5, -0.5])
     assert np.isclose(posterior(params), unpickled(params))
+
+
+def test_posterior_batched():
+    """Test the posterior with batched inputs."""
+
+    posterior_fn = Posterior(_dummy_likelihood_fn, _dummy_prior_fn)
+
+    # Batched parameters: shape (3, 3) - 3 models with 3 parameters each
+    params = np.array(
+        [
+            [1.0, 2.0, -1.5],
+            [0.5, -0.5, 1.0],
+            [-1.0, 1.5, 0.0],
+        ]
+    )
+    log_posteriors = posterior_fn(params)
+
+    # Expected results for each model
+    expected_log_likelihoods = -0.5 * np.sum(params**2, axis=1)
+    expected_log_priors = -np.sum(np.abs(params), axis=1)
+    expected_log_posteriors = expected_log_likelihoods + expected_log_priors
+
+    assert log_posteriors.shape == (3,)
+    np.testing.assert_allclose(log_posteriors, expected_log_posteriors)
+
+
+def test_posterior_batched_consistent_with_single():
+    """Test that batched evaluation gives same results as individual calls."""
+
+    posterior_fn = Posterior(_dummy_likelihood_fn, _dummy_prior_fn)
+
+    models = [
+        np.array([1.0, 2.0, -1.5]),
+        np.array([0.5, -0.5, 1.0]),
+        np.array([-1.0, 1.5, 0.0]),
+    ]
+
+    # Individual calls
+    individual_results = np.array([posterior_fn(m) for m in models])
+
+    # Batched call
+    batched_models = np.array(models)
+    batched_results = posterior_fn(batched_models)
+
+    assert batched_results.shape == (3,)
+    np.testing.assert_allclose(individual_results, batched_results)
 
 
 @pytest.fixture
