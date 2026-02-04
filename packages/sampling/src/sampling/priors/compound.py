@@ -296,5 +296,8 @@ class CompoundPriorConfig:
             comp.vectorised = self.vectorised
 
         prior_components = [comp.to_prior_component() for comp in self.components]
-        kwargs = {k: v for k, v in self.__dict__.items() if k != "components"}
+        # Only forward explicitly supported keyword arguments to CompoundPrior
+        # Derive allowed keys from dataclass fields, excluding 'components'
+        known_fields = {f.name for f in fields(self) if f.name != "components"}
+        kwargs = {k: v for k, v in self.__dict__.items() if k in known_fields}
         return CompoundPrior(prior_components, **kwargs)
