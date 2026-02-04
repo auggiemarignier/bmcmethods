@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from itertools import chain
 from typing import Any
 
@@ -277,7 +277,8 @@ class CompoundPriorConfig:
             component_configs.append(component_config)
 
         # Only pass known dataclass fields, silently ignore unknown keys
-        known_fields = {"vectorised"}
+        # Derive allowed keys from dataclass fields, excluding 'components'
+        known_fields = {f.name for f in fields(cls) if f.name != "components"}
         config_kwargs = {k: v for k, v in _config_dict.items() if k in known_fields}
 
         return cls(components=component_configs, **config_kwargs)
