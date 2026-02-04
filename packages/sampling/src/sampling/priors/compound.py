@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from itertools import chain
 from typing import Any
 
@@ -188,6 +188,8 @@ class CompoundPriorConfig:
     ----------
     components : list[GaussianPriorConfig | UniformPriorConfig]
         List of prior component configurations.
+    vectorised : bool, optional
+        If True, the prior can evaluate batches of models. Default is True.
 
     Examples
     --------
@@ -214,6 +216,7 @@ class CompoundPriorConfig:
     """
 
     components: list[PriorComponentConfig] = field(default_factory=list)
+    vectorised: bool = True
 
     def __post_init__(self) -> None:
         """Validate component configurations."""
@@ -243,14 +246,19 @@ class CompoundPriorConfig:
         ----------
         config_dict : dict
             Dictionary with a 'components' key containing a list of component configs.
+            Additional recognised keys (e.g., 'vectorised') are passed to the constructor.
+            Unknown keys are silently ignored.
 
         Returns
         -------
         CompoundPriorConfig
             Configuration instance ready to build a CompoundPrior.
         """
+        _config_dict = config_dict.copy()
+        component_dicts = _config_dict.pop("components")
+
         component_configs = []
-        for comp_dict in config_dict["components"]:
+        for comp_dict in component_dicts:
             _comp_dict = comp_dict.copy()
             comp_type = _comp_dict.pop("type", None)
             if comp_type is None:
@@ -268,7 +276,12 @@ class CompoundPriorConfig:
             component_config = factory_cls(**_comp_dict)
             component_configs.append(component_config)
 
-        return cls(components=component_configs)
+        # Only pass known dataclass fields, silently ignore unknown keys
+        # Derive allowed keys from dataclass fields, excluding 'components'
+        known_fields = {f.name for f in fields(cls) if f.name != "components"}
+        config_kwargs = {k: v for k, v in _config_dict.items() if k in known_fields}
+
+        return cls(components=component_configs, **config_kwargs)
 
     def to_compound_prior(self) -> CompoundPrior:
         """Build a CompoundPrior from this configuration.
@@ -278,5 +291,13 @@ class CompoundPriorConfig:
         CompoundPrior
             Compound prior built from all component configurations.
         """
+        # Update component configs with the compound prior's vectorised setting
+        for comp in self.components:
+            comp.vectorised = self.vectorised
+
         prior_components = [comp.to_prior_component() for comp in self.components]
-        return CompoundPrior(prior_components)
+        # Only forward explicitly supported keyword arguments to CompoundPrior
+        # Derive allowed keys from dataclass fields, excluding 'components'
+        known_fields = {f.name for f in fields(self) if f.name != "components"}
+        kwargs = {k: v for k, v in self.__dict__.items() if k in known_fields}
+        return CompoundPrior(prior_components, **kwargs)
