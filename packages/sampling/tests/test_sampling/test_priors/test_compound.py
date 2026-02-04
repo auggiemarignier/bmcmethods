@@ -8,6 +8,7 @@ from sampling.priors import (
     PriorComponent,
     UniformPrior,
 )
+from sampling.priors.compound import CompoundPriorConfig
 
 
 class TestPriorComponent:
@@ -215,3 +216,130 @@ class TestCompoundPrior:
 
         assert batched_results.shape == (4,)
         np.testing.assert_allclose(individual_results, batched_results)
+
+
+class TestCompoundPriorConfig:
+    """Tests for CompoundPriorConfig."""
+
+    @pytest.fixture
+    def basic_config_dict(self) -> dict:
+        """Create a basic configuration dictionary."""
+        return {
+            "components": [
+                {
+                    "type": "gaussian",
+                    "mean": [0.0, 0.0],
+                    "inv_covar": [[1.0, 0.0], [0.0, 1.0]],
+                    "indices": [0, 1],
+                },
+                {
+                    "type": "uniform",
+                    "lower_bounds": [-1.0, -1.0],
+                    "upper_bounds": [1.0, 1.0],
+                    "indices": [2, 3],
+                },
+            ]
+        }
+
+    def test_config_default_vectorised(self, basic_config_dict: dict) -> None:
+        """Test that vectorised defaults to True."""
+        config = CompoundPriorConfig.from_dict(basic_config_dict)
+        assert config.vectorised is True
+
+    def test_config_explicit_vectorised_true(self, basic_config_dict: dict) -> None:
+        """Test that vectorised can be explicitly set to True."""
+        basic_config_dict["vectorised"] = True
+        config = CompoundPriorConfig.from_dict(basic_config_dict)
+        assert config.vectorised is True
+
+    def test_config_explicit_vectorised_false(self, basic_config_dict: dict) -> None:
+        """Test that vectorised can be set to False."""
+        basic_config_dict["vectorised"] = False
+        config = CompoundPriorConfig.from_dict(basic_config_dict)
+        assert config.vectorised is False
+
+    def test_config_with_extra_attributes_ignored(
+        self, basic_config_dict: dict
+    ) -> None:
+        """Test that random extra attributes in config_dict are silently ignored."""
+        basic_config_dict["random_attribute_1"] = "should_be_ignored"
+        basic_config_dict["random_attribute_2"] = 42
+        basic_config_dict["another_random_thing"] = [1, 2, 3]
+
+        # Should not raise an error
+        config = CompoundPriorConfig.from_dict(basic_config_dict)
+
+        # Should have default vectorised value
+        assert config.vectorised is True
+
+        # Extra attributes should not be stored in the config
+        assert not hasattr(config, "random_attribute_1")
+        assert not hasattr(config, "random_attribute_2")
+        assert not hasattr(config, "another_random_thing")
+
+    def test_config_to_compound_prior_vectorised_true(
+        self, basic_config_dict: dict
+    ) -> None:
+        """Test that to_compound_prior passes vectorised=True correctly."""
+        basic_config_dict["vectorised"] = True
+        config = CompoundPriorConfig.from_dict(basic_config_dict)
+        prior = config.to_compound_prior()
+
+        # Test that the prior is vectorised by passing a batch
+        models = np.array([[0.0, 0.0, 0.0, 0.0], [1.0, -1.0, 0.5, -0.5]])
+        result = prior(models)
+
+        assert isinstance(result, np.ndarray)
+        assert result.shape == (2,)
+
+    def test_config_to_compound_prior_vectorised_false(
+        self, basic_config_dict: dict
+    ) -> None:
+        """Test that to_compound_prior passes vectorised=False correctly."""
+        basic_config_dict["vectorised"] = False
+        config = CompoundPriorConfig.from_dict(basic_config_dict)
+        prior = config.to_compound_prior()
+
+        # Test that the prior is not vectorised by passing a single model
+        model = np.array([0.0, 0.0, 0.0, 0.0])
+        result = prior(model)
+
+        assert isinstance(result, (float | np.floating))
+
+    def test_config_from_dict_preserves_components(
+        self, basic_config_dict: dict
+    ) -> None:
+        """Test that from_dict correctly parses component configurations."""
+        config = CompoundPriorConfig.from_dict(basic_config_dict)
+
+        assert len(config.components) == 2
+        assert config.components[0].type == "gaussian"
+        assert config.components[1].type == "uniform"
+
+    def test_config_with_vectorised_and_extra_attrs(
+        self, basic_config_dict: dict
+    ) -> None:
+        """Test that vectorised is preserved when extra attributes are present."""
+        basic_config_dict["vectorised"] = False
+        basic_config_dict["extra_1"] = "ignored"
+        basic_config_dict["extra_2"] = 123
+
+        config = CompoundPriorConfig.from_dict(basic_config_dict)
+
+        assert config.vectorised is False
+        assert not hasattr(config, "extra_1")
+        assert not hasattr(config, "extra_2")
+
+    def test_compound_prior_from_dict_class_method(
+        self, basic_config_dict: dict
+    ) -> None:
+        """Test CompoundPrior.from_dict uses CompoundPriorConfig correctly."""
+        basic_config_dict["vectorised"] = False
+        prior = CompoundPrior.from_dict(basic_config_dict)
+
+        # Test that it's a non-vectorised prior
+        model = np.array([0.0, 0.0, 0.0, 0.0])
+        result = prior(model)
+
+        assert isinstance(result, (float | np.floating))
+        assert prior.n == 4

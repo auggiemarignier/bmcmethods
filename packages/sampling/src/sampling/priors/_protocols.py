@@ -64,6 +64,7 @@ class PriorComponentConfig(Protocol):
 
     type: PriorType
     indices: list[int]
+    vectorised: bool
 
     def to_prior_component(self) -> PriorComponent:
         """Convert the configuration to a PriorComponent instance."""
