@@ -250,8 +250,7 @@ def test_gaussian_prior_vectorised_consistent_with_individual_calls() -> None:
     """Test that batched evaluation gives same results as individual calls."""
     mean = np.array([0.0, 0.0])
     inv_covar = np.eye(2)
-    scalar_prior = GaussianPrior(mean, inv_covar)
-    vectorised_prior = GaussianPrior(mean, inv_covar)
+    prior = GaussianPrior(mean, inv_covar)
 
     models = [
         np.array([0.0, 0.0]),
@@ -262,11 +261,11 @@ def test_gaussian_prior_vectorised_consistent_with_individual_calls() -> None:
     ]
 
     # Individual calls
-    individual_results = np.array([scalar_prior(m) for m in models])
+    individual_results = np.array([prior(m) for m in models])
 
     # Batched call
     batched_models = np.array(models)
-    batched_results = vectorised_prior(batched_models)
+    batched_results = prior(batched_models)
 
     assert batched_results.shape == (5,)
     np.testing.assert_allclose(individual_results, batched_results)

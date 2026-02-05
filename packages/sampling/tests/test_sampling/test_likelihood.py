@@ -266,36 +266,6 @@ class TestVectorisedVsScalar:
         ]
     )
 
-    def _vectorised_forward_fn(self, model_params: np.ndarray) -> np.ndarray:
-        """Forward function that handles both scalar and batch inputs."""
-        return model_params * 2.0
-
-    @pytest.mark.parametrize(
-        "inv_covar",
-        [
-            np.array([[2.0, 0.0, 0.0], [0.0, 1.5, 0.0], [0.0, 0.0, 1.0]]),
-            np.array([2.0, 1.5, 1.0]),
-            np.array([1.5]),
-        ],
-        ids=["full_covariance", "diagonal_covariance", "scalar_covariance"],
-    )
-    def test_scalar_vs_vectorised_single(self, inv_covar):
-        """Test scalar and vectorised evaluation with single model parameters."""
-        likelihood_scalar = GaussianLikelihood(
-            self._vectorised_forward_fn,
-            self.observed_data,
-            inv_covar,
-        )
-        likelihood_vectorised = GaussianLikelihood(
-            self._vectorised_forward_fn,
-            self.observed_data,
-            inv_covar,
-        )
-
-        result_scalar = likelihood_scalar(self.model_params_single)
-        result_vectorised_single = likelihood_vectorised(self.model_params_single)
-        np.testing.assert_allclose(result_scalar, result_vectorised_single)
-
     @pytest.mark.parametrize(
         "inv_covar",
         [
@@ -307,33 +277,28 @@ class TestVectorisedVsScalar:
     )
     def test_scalar_vs_vectorised_batch(self, inv_covar):
         """Test scalar and vectorised evaluation with batch of model parameters."""
-        likelihood_scalar = GaussianLikelihood(
-            self._vectorised_forward_fn,
-            self.observed_data,
-            inv_covar,
-        )
-        likelihood_vectorised = GaussianLikelihood(
-            self._vectorised_forward_fn,
+        likelihood = GaussianLikelihood(
+            _dummy_forward_fn,
             self.observed_data,
             inv_covar,
         )
 
         # Test batch evaluation
-        result_vectorised_batch = likelihood_vectorised(self.model_params_batch)
-        assert result_vectorised_batch.shape == (3,)
+        result_batch = likelihood(self.model_params_batch)
+        assert result_batch.shape == (3,)
 
         # Test that batch includes the single result
-        scalar_result = np.array(
-            [likelihood_scalar(params) for params in self.model_params_batch]
+        result_individual = np.array(
+            [likelihood(params) for params in self.model_params_batch]
         )
-        np.testing.assert_allclose(scalar_result, result_vectorised_batch)
+        np.testing.assert_allclose(result_individual, result_batch)
 
     def test_scalar_return_type(self):
         """Test that scalar mode returns float, not array."""
         inv_covar = np.array([[2.0, 0.0, 0.0], [0.0, 1.5, 0.0], [0.0, 0.0, 1.0]])
 
         likelihood = GaussianLikelihood(
-            self._vectorised_forward_fn,
+            _dummy_forward_fn,
             self.observed_data,
             inv_covar,
         )
@@ -347,7 +312,7 @@ class TestVectorisedVsScalar:
         inv_covar = np.array([[2.0, 0.0, 0.0], [0.0, 1.5, 0.0], [0.0, 0.0, 1.0]])
 
         likelihood = GaussianLikelihood(
-            self._vectorised_forward_fn,
+            _dummy_forward_fn,
             self.observed_data,
             inv_covar,
         )
