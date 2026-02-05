@@ -294,7 +294,7 @@ class TestBatchedVsScalar:
         np.testing.assert_allclose(result_individual, result_batch)
 
     def test_scalar_return_type(self):
-        """Test that scalar mode returns float, not array."""
+        """Test that scalar mode returns a 0D NumPy array (scalar array), not a Python float."""
         inv_covar = np.array([[2.0, 0.0, 0.0], [0.0, 1.5, 0.0], [0.0, 0.0, 1.0]])
 
         likelihood = GaussianLikelihood(
