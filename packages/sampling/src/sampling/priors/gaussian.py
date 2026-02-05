@@ -26,7 +26,7 @@ class GaussianPrior:
     """
 
     def __init__(
-        self, mean: np.ndarray, inv_covar: np.ndarray, vectorised: bool = True
+        self, mean: np.ndarray, inv_covar: np.ndarray, vectorised: bool = False
     ) -> None:
         _validate_covariance_matrix(inv_covar, mean.size)
         self.mean = mean

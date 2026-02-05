@@ -30,7 +30,7 @@ class UniformPrior:
         self,
         lower_bounds: np.ndarray,
         upper_bounds: np.ndarray,
-        vectorised: bool = True,
+        vectorised: bool = False,
     ) -> None:
         if lower_bounds.shape != upper_bounds.shape:
             raise ValueError(

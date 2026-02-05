@@ -37,8 +37,8 @@ class MCMCConfig:
     nwalkers: int = 50
     nsteps: int = 1000
     burn_in: int = 200
-    vectorise: bool = True
-    parallel: bool = False
+    vectorise: bool = False
+    parallel: bool = True
     progress: bool = True
     thin: int = 1
 

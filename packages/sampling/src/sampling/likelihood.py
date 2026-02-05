@@ -21,7 +21,7 @@ class GaussianLikelihood:
         forward_fn: Callable[[np.ndarray], np.ndarray],
         observed_data: np.ndarray,
         inv_covar: float | np.ndarray,
-        vectorised: bool = True,
+        vectorised: bool = False,
         validate_covariance: bool = True,
         example_model: None | np.ndarray = None,
     ) -> None:

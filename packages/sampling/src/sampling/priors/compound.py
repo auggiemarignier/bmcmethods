@@ -54,7 +54,7 @@ class CompoundPrior:
     """
 
     def __init__(
-        self, prior_components: Sequence[PriorComponent], vectorised: bool = True
+        self, prior_components: Sequence[PriorComponent], vectorised: bool = False
     ) -> None:
         self.prior_components = prior_components
         self._n = sum(c.n for c in prior_components)
