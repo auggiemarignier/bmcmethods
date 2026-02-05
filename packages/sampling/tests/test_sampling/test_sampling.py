@@ -12,7 +12,7 @@ def likelihood_fn(theta: np.ndarray) -> np.ndarray:
     """Simple log-probability: standard normal (up to additive constant).
 
     Not in a fixture because needs to be top-level for pickling in multiprocessing.
-    Supports both scalar (1D) and vectorised (2D) inputs.
+    Supports both scalar (1D) and batched (2D) inputs.
     """
     theta = np.atleast_2d(theta)
     return -0.5 * np.sum(theta * theta, axis=1).squeeze()
@@ -22,7 +22,7 @@ class LogPrior:
     """Dummy prior for testing.
 
     Not in a fixture because needs to be top-level for pickling in multiprocessing.
-    Supports both scalar (1D) and vectorised (2D) inputs.
+    Supports both scalar (1D) and batched (2D) inputs.
     """
 
     def __call__(self, model_params: np.ndarray) -> np.ndarray:

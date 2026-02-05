@@ -253,8 +253,8 @@ class TestChooseExponentialTermFunction:
         assert fn(np.zeros(1)) == "scalar"
 
 
-class TestVectorisedVsScalar:
-    """Test that vectorised and scalar evaluations produce identical results."""
+class TestBatchedVsScalar:
+    """Test that batched and scalar evaluations produce identical results."""
 
     observed_data = np.array([1.0, 2.0, 3.0])
     model_params_single = np.array([0.5, 1.0, 1.5])
@@ -275,8 +275,8 @@ class TestVectorisedVsScalar:
         ],
         ids=["full_covariance", "diagonal_covariance", "scalar_covariance"],
     )
-    def test_scalar_vs_vectorised_batch(self, inv_covar):
-        """Test scalar and vectorised evaluation with batch of model parameters."""
+    def test_scalar_vs_batched_batch(self, inv_covar):
+        """Test scalar and batched evaluation with batch of model parameters."""
         likelihood = GaussianLikelihood(
             _dummy_forward_fn,
             self.observed_data,
@@ -307,8 +307,8 @@ class TestVectorisedVsScalar:
         assert isinstance(result, np.ndarray)
         assert result.ndim == 0  # scalar array
 
-    def test_vectorised_return_type(self):
-        """Test that vectorised mode returns array for batch input."""
+    def test_batched_return_type(self):
+        """Test that batched mode returns array for batch input."""
         inv_covar = np.array([[2.0, 0.0, 0.0], [0.0, 1.5, 0.0], [0.0, 0.0, 1.0]])
 
         likelihood = GaussianLikelihood(

@@ -104,20 +104,20 @@ class TestCompoundPrior:
         samples2 = compound_prior.sample(5, rng2)
         np.testing.assert_array_equal(samples1, samples2)
 
-    def test_compound_prior_vectorised_single_model(
+    def test_compound_prior_batched_single_model(
         self, compound_prior: CompoundPrior
     ) -> None:
-        """Test that vectorised evaluation works for a single model."""
+        """Test that batched evaluation works for a single model."""
         model = np.array([[0.0, 0.0, 0.0, 0.0]])
         log_priors = compound_prior(model)
 
         assert log_priors.ndim == 0
         assert np.isfinite(log_priors)
 
-    def test_compound_prior_vectorised_multiple_models(
+    def test_compound_prior_batched_multiple_models(
         self, compound_prior: CompoundPrior
     ) -> None:
-        """Test that vectorised evaluation works for multiple models."""
+        """Test that batched evaluation works for multiple models."""
         models = np.array(
             [
                 [0.0, 0.0, 0.0, 0.0],
@@ -130,10 +130,10 @@ class TestCompoundPrior:
         assert log_priors.shape == (3,)
         assert np.all(np.isfinite(log_priors))
 
-    def test_compound_prior_vectorised_mixed_valid_invalid(
+    def test_compound_prior_batched_mixed_valid_invalid(
         self, compound_prior: CompoundPrior
     ) -> None:
-        """Test vectorised evaluation with some models out of bounds."""
+        """Test batched evaluation with some models out of bounds."""
         models = np.array(
             [
                 [0.0, 0.0, 0.0, 0.0],  # valid
@@ -150,7 +150,7 @@ class TestCompoundPrior:
         assert np.isfinite(log_priors[2])
         assert log_priors[3] == -np.inf
 
-    def test_compound_prior_vectorised_consistent_with_individual_calls(self) -> None:
+    def test_compound_prior_batched_consistent_with_individual_calls(self) -> None:
         """Test that batched evaluation gives same results as individual calls."""
         mean = np.array([0.0, 0.0])
         covar = np.eye(2)

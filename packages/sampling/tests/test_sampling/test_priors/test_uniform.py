@@ -183,10 +183,10 @@ def test_uniform_prior_sample_reproducibility(
     np.testing.assert_array_equal(samples1, samples2)
 
 
-def test_uniform_prior_vectorised_single_model(
+def test_uniform_prior_batched_single_model(
     valid_uniform_prior: UniformPrior,
 ) -> None:
-    """Test that vectorised evaluation works for a single model."""
+    """Test that batched evaluation works for a single model."""
     params = np.array([[0.5, 0.5]])
     log_priors = valid_uniform_prior(params)
 
@@ -194,10 +194,10 @@ def test_uniform_prior_vectorised_single_model(
     assert log_priors == valid_uniform_prior._normalisation
 
 
-def test_uniform_prior_vectorised_multiple_models(
+def test_uniform_prior_batched_multiple_models(
     valid_uniform_prior: UniformPrior,
 ) -> None:
-    """Test that vectorised evaluation works for multiple models."""
+    """Test that batched evaluation works for multiple models."""
     params = np.array(
         [
             [0.5, 0.5],
@@ -214,10 +214,10 @@ def test_uniform_prior_vectorised_multiple_models(
     )
 
 
-def test_uniform_prior_vectorised_mixed_bounds(
+def test_uniform_prior_batched_mixed_bounds(
     valid_uniform_prior: UniformPrior,
 ) -> None:
-    """Test vectorised evaluation with some models in and out of bounds."""
+    """Test batched evaluation with some models in and out of bounds."""
     params = np.array(
         [
             [0.5, 0.5],  # in bounds
@@ -237,7 +237,7 @@ def test_uniform_prior_vectorised_mixed_bounds(
     assert log_priors[4] == valid_uniform_prior._normalisation
 
 
-def test_uniform_prior_vectorised_consistent_with_individual_calls(
+def test_uniform_prior_batched_consistent_with_individual_calls(
     lower: np.ndarray, upper: np.ndarray
 ) -> None:
     """Test that batched evaluation gives same results as individual calls."""

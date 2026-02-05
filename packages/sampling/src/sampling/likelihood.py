@@ -9,11 +9,7 @@ class GaussianLikelihood:
     """
     Represents a Gaussian likelihood function for MCMC sampling.
 
-    The Gaussian likelihood assumes that the observed data is normally distributed
-    around the model predictions, with a specified inverse covariance matrix.
-
-    This implementation is fully vectorised and handles both single parameter
-    evaluation and batch evaluation transparently.
+    The Gaussian likelihood assumes that the observed data is normally distributed around the model predictions, with a specified inverse covariance matrix.
     """
 
     def __init__(

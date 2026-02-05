@@ -166,8 +166,8 @@ def test_gaussian_prior_sample_reproducibility() -> None:
     np.testing.assert_array_equal(samples1, samples2)
 
 
-def test_gaussian_prior_vectorised_single_model() -> None:
-    """Test that vectorised evaluation works for a single model."""
+def test_gaussian_prior_batched_single_model() -> None:
+    """Test that batched evaluation works for a single model."""
     mean = np.array([0.0, 0.0])
     inv_covar = np.eye(2)
     prior = GaussianPrior(mean, inv_covar)
@@ -179,8 +179,8 @@ def test_gaussian_prior_vectorised_single_model() -> None:
     assert log_priors == prior._normalisation
 
 
-def test_gaussian_prior_vectorised_multiple_models() -> None:
-    """Test that vectorised evaluation works for multiple models."""
+def test_gaussian_prior_batched_multiple_models() -> None:
+    """Test that batched evaluation works for multiple models."""
     mean = np.array([0.0, 0.0])
     inv_covar = np.eye(2)
     prior = GaussianPrior(mean, inv_covar)
@@ -205,8 +205,8 @@ def test_gaussian_prior_vectorised_multiple_models() -> None:
     np.testing.assert_allclose(log_priors[3], prior._normalisation - 1.0)
 
 
-def test_gaussian_prior_vectorised_symmetry() -> None:
-    """Test that vectorised evaluation maintains symmetry."""
+def test_gaussian_prior_batched_symmetry() -> None:
+    """Test that batched evaluation maintains symmetry."""
     mean = np.array([0.0, 0.0])
     inv_covar = np.eye(2)
     prior = GaussianPrior(mean, inv_covar)
@@ -224,8 +224,8 @@ def test_gaussian_prior_vectorised_symmetry() -> None:
     np.testing.assert_allclose(log_priors[0], log_priors[1])
 
 
-def test_gaussian_prior_vectorised_with_correlation() -> None:
-    """Test vectorised evaluation with correlated covariance."""
+def test_gaussian_prior_batched_with_correlation() -> None:
+    """Test batched evaluation with correlated covariance."""
     mean = np.array([0.0, 0.0])
     inv_covar = np.array([[2.0, -1.0], [-1.0, 2.0]])
     prior = GaussianPrior(mean, inv_covar)
@@ -246,7 +246,7 @@ def test_gaussian_prior_vectorised_with_correlation() -> None:
     assert log_priors[0] > log_priors[2]
 
 
-def test_gaussian_prior_vectorised_consistent_with_individual_calls() -> None:
+def test_gaussian_prior_batched_consistent_with_individual_calls() -> None:
     """Test that batched evaluation gives same results as individual calls."""
     mean = np.array([0.0, 0.0])
     inv_covar = np.eye(2)
