@@ -285,13 +285,11 @@ class TestVectorisedVsScalar:
             self._vectorised_forward_fn,
             self.observed_data,
             inv_covar,
-            vectorised=False,
         )
         likelihood_vectorised = GaussianLikelihood(
             self._vectorised_forward_fn,
             self.observed_data,
             inv_covar,
-            vectorised=True,
         )
 
         result_scalar = likelihood_scalar(self.model_params_single)
@@ -313,13 +311,11 @@ class TestVectorisedVsScalar:
             self._vectorised_forward_fn,
             self.observed_data,
             inv_covar,
-            vectorised=False,
         )
         likelihood_vectorised = GaussianLikelihood(
             self._vectorised_forward_fn,
             self.observed_data,
             inv_covar,
-            vectorised=True,
         )
 
         # Test batch evaluation
@@ -340,7 +336,6 @@ class TestVectorisedVsScalar:
             self._vectorised_forward_fn,
             self.observed_data,
             inv_covar,
-            vectorised=False,
         )
 
         result = likelihood(self.model_params_single)
@@ -354,7 +349,6 @@ class TestVectorisedVsScalar:
             self._vectorised_forward_fn,
             self.observed_data,
             inv_covar,
-            vectorised=True,
         )
 
         result = likelihood(self.model_params_batch)

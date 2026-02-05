@@ -22,7 +22,7 @@ def upper() -> np.ndarray:
 @pytest.fixture
 def valid_uniform_prior(lower: np.ndarray, upper: np.ndarray) -> UniformPrior:
     """Create a valid uniform prior function for testing."""
-    return UniformPrior(lower, upper, vectorised=False)
+    return UniformPrior(lower, upper)
 
 
 @pytest.fixture
@@ -122,7 +122,7 @@ def test_uniform_prior_invalid_bounds() -> None:
     upper = np.array([1.0, 0.5])  # Second bound is invalid
 
     with pytest.raises(ValueError, match="lower bound must be less than"):
-        UniformPrior(lower, upper, vectorised=False)
+        UniformPrior(lower, upper)
 
 
 def test_uniform_prior_equal_bounds() -> None:
@@ -131,14 +131,14 @@ def test_uniform_prior_equal_bounds() -> None:
     upper = np.array([1.0, 1.0])  # Second bound is equal
 
     with pytest.raises(ValueError, match="lower bound must be less than"):
-        UniformPrior(lower, upper, vectorised=False)
+        UniformPrior(lower, upper)
 
 
 def test_uniform_prior_different_ranges() -> None:
     """Test uniform prior with different ranges per dimension."""
     lower = np.array([0.0, -10.0, 5.0])
     upper = np.array([1.0, 10.0, 15.0])
-    prior_fn = UniformPrior(lower, upper, vectorised=False)
+    prior_fn = UniformPrior(lower, upper)
 
     # In bounds
     params_in = np.array([0.5, 0.0, 10.0])
@@ -154,7 +154,7 @@ def test_uniform_prior_high_dimensional() -> None:
     n_dims = 10
     lower = np.zeros(n_dims)
     upper = np.ones(n_dims)
-    prior_fn = UniformPrior(lower, upper, vectorised=False)
+    prior_fn = UniformPrior(lower, upper)
 
     # All in bounds
     params_in = np.full(n_dims, 0.5)
@@ -247,7 +247,7 @@ def test_uniform_prior_vectorised_consistent_with_individual_calls(
     lower: np.ndarray, upper: np.ndarray
 ) -> None:
     """Test that batched evaluation gives same results as individual calls."""
-    scalar_prior = UniformPrior(lower, upper, vectorised=False)
+    scalar_prior = UniformPrior(lower, upper)
     vectorised_prior = UniformPrior(lower, upper)
 
     models = [

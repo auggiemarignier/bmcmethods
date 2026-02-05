@@ -50,21 +50,17 @@ class TestCompoundPrior:
         # Gaussian prior on first two parameters
         mean = np.array([0.0, 0.0])
         covar = np.eye(2)
-        gaussian_prior = GaussianPrior(mean, covar, vectorised=False)
-        gaussian_component = PriorComponent(
-            prior_fn=gaussian_prior, indices=[0, 1], vectorised=False
-        )
+        gaussian_prior = GaussianPrior(mean, covar)
+        gaussian_component = PriorComponent(prior_fn=gaussian_prior, indices=[0, 1])
 
         # Uniform prior on last two parameters
         lower = np.array([-1.0, -1.0])
         upper = np.array([1.0, 1.0])
-        uniform_prior = UniformPrior(lower, upper, vectorised=False)
-        uniform_component = PriorComponent(
-            prior_fn=uniform_prior, indices=[2, 3], vectorised=False
-        )
+        uniform_prior = UniformPrior(lower, upper)
+        uniform_component = PriorComponent(prior_fn=uniform_prior, indices=[2, 3])
 
         # Combine into compound prior
-        return CompoundPrior([gaussian_component, uniform_component], vectorised=False)
+        return CompoundPrior([gaussian_component, uniform_component])
 
     @pytest.fixture
     def vectorised_compound_prior(self) -> CompoundPrior:
@@ -176,18 +172,13 @@ class TestCompoundPrior:
         upper = np.array([1.0, 1.0])
 
         # Scalar version
-        gaussian_prior_scalar = GaussianPrior(mean, covar, vectorised=False)
-        uniform_prior_scalar = UniformPrior(lower, upper, vectorised=False)
+        gaussian_prior_scalar = GaussianPrior(mean, covar)
+        uniform_prior_scalar = UniformPrior(lower, upper)
         scalar_compound = CompoundPrior(
             [
-                PriorComponent(
-                    prior_fn=gaussian_prior_scalar, indices=[0, 1], vectorised=False
-                ),
-                PriorComponent(
-                    prior_fn=uniform_prior_scalar, indices=[2, 3], vectorised=False
-                ),
+                PriorComponent(prior_fn=gaussian_prior_scalar, indices=[0, 1]),
+                PriorComponent(prior_fn=uniform_prior_scalar, indices=[2, 3]),
             ],
-            vectorised=False,
         )
 
         # Vectorised version
