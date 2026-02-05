@@ -8,7 +8,6 @@ from sampling.priors import (
     PriorComponent,
     UniformPrior,
 )
-from sampling.priors.compound import CompoundPriorConfig
 
 
 class TestPriorComponent:
@@ -47,28 +46,6 @@ class TestCompoundPrior:
     @pytest.fixture
     def compound_prior(self) -> CompoundPrior:
         """Create a compound prior for testing."""
-        # Gaussian prior on first two parameters
-        mean = np.array([0.0, 0.0])
-        covar = np.eye(2)
-        gaussian_prior = GaussianPrior(mean, covar, vectorised=False)
-        gaussian_component = PriorComponent(
-            prior_fn=gaussian_prior, indices=[0, 1], vectorised=False
-        )
-
-        # Uniform prior on last two parameters
-        lower = np.array([-1.0, -1.0])
-        upper = np.array([1.0, 1.0])
-        uniform_prior = UniformPrior(lower, upper, vectorised=False)
-        uniform_component = PriorComponent(
-            prior_fn=uniform_prior, indices=[2, 3], vectorised=False
-        )
-
-        # Combine into compound prior
-        return CompoundPrior([gaussian_component, uniform_component], vectorised=False)
-
-    @pytest.fixture
-    def vectorised_compound_prior(self) -> CompoundPrior:
-        """Create a vectorised compound prior for testing."""
         # Gaussian prior on first two parameters
         mean = np.array([0.0, 0.0])
         covar = np.eye(2)
@@ -113,28 +90,34 @@ class TestCompoundPrior:
         log_prior_out_uniform = compound_prior(model)
         assert log_prior_out_uniform == -np.inf
 
-    def test_compound_prior_sample_shape(self, compound_prior):
+    def test_compound_prior_sample_shape(self, compound_prior: CompoundPrior) -> None:
         rng = np.random.default_rng(42)
         samples = compound_prior.sample(10, rng)
         assert samples.shape == (10, compound_prior.n)
 
-    def test_compound_prior_sample_reproducibility(self, compound_prior):
+    def test_compound_prior_sample_reproducibility(
+        self, compound_prior: CompoundPrior
+    ) -> None:
         rng1 = np.random.default_rng(2024)
         rng2 = np.random.default_rng(2024)
         samples1 = compound_prior.sample(5, rng1)
         samples2 = compound_prior.sample(5, rng2)
         np.testing.assert_array_equal(samples1, samples2)
 
-    def test_compound_prior_vectorised_single_model(self, vectorised_compound_prior):
-        """Test that vectorised evaluation works for a single model."""
+    def test_compound_prior_batched_single_model(
+        self, compound_prior: CompoundPrior
+    ) -> None:
+        """Test that batched evaluation works for a single model."""
         model = np.array([[0.0, 0.0, 0.0, 0.0]])
-        log_priors = vectorised_compound_prior(model)
+        log_priors = compound_prior(model)
 
-        assert log_priors.shape == (1,)
-        assert np.isfinite(log_priors[0])
+        assert log_priors.ndim == 0
+        assert np.isfinite(log_priors)
 
-    def test_compound_prior_vectorised_multiple_models(self, vectorised_compound_prior):
-        """Test that vectorised evaluation works for multiple models."""
+    def test_compound_prior_batched_multiple_models(
+        self, compound_prior: CompoundPrior
+    ) -> None:
+        """Test that batched evaluation works for multiple models."""
         models = np.array(
             [
                 [0.0, 0.0, 0.0, 0.0],
@@ -142,15 +125,15 @@ class TestCompoundPrior:
                 [0.5, 0.5, 0.25, 0.75],
             ]
         )
-        log_priors = vectorised_compound_prior(models)
+        log_priors = compound_prior(models)
 
         assert log_priors.shape == (3,)
         assert np.all(np.isfinite(log_priors))
 
-    def test_compound_prior_vectorised_mixed_valid_invalid(
-        self, vectorised_compound_prior
-    ):
-        """Test vectorised evaluation with some models out of bounds."""
+    def test_compound_prior_batched_mixed_valid_invalid(
+        self, compound_prior: CompoundPrior
+    ) -> None:
+        """Test batched evaluation with some models out of bounds."""
         models = np.array(
             [
                 [0.0, 0.0, 0.0, 0.0],  # valid
@@ -159,7 +142,7 @@ class TestCompoundPrior:
                 [0.0, 0.0, -2.0, 0.0],  # out of uniform bounds
             ]
         )
-        log_priors = vectorised_compound_prior(models)
+        log_priors = compound_prior(models)
 
         assert log_priors.shape == (4,)
         assert np.isfinite(log_priors[0])
@@ -167,36 +150,19 @@ class TestCompoundPrior:
         assert np.isfinite(log_priors[2])
         assert log_priors[3] == -np.inf
 
-    def test_compound_prior_vectorised_consistent_with_individual_calls(self):
+    def test_compound_prior_batched_consistent_with_individual_calls(self) -> None:
         """Test that batched evaluation gives same results as individual calls."""
-        # Create both scalar and vectorised versions
         mean = np.array([0.0, 0.0])
         covar = np.eye(2)
         lower = np.array([-1.0, -1.0])
         upper = np.array([1.0, 1.0])
 
-        # Scalar version
-        gaussian_prior_scalar = GaussianPrior(mean, covar, vectorised=False)
-        uniform_prior_scalar = UniformPrior(lower, upper, vectorised=False)
-        scalar_compound = CompoundPrior(
+        gaussian_prior = GaussianPrior(mean, covar)
+        uniform_prior = UniformPrior(lower, upper)
+        compound_prior = CompoundPrior(
             [
-                PriorComponent(
-                    prior_fn=gaussian_prior_scalar, indices=[0, 1], vectorised=False
-                ),
-                PriorComponent(
-                    prior_fn=uniform_prior_scalar, indices=[2, 3], vectorised=False
-                ),
-            ],
-            vectorised=False,
-        )
-
-        # Vectorised version
-        gaussian_prior_vec = GaussianPrior(mean, covar)
-        uniform_prior_vec = UniformPrior(lower, upper)
-        vectorised_compound = CompoundPrior(
-            [
-                PriorComponent(prior_fn=gaussian_prior_vec, indices=[0, 1]),
-                PriorComponent(prior_fn=uniform_prior_vec, indices=[2, 3]),
+                PriorComponent(prior_fn=gaussian_prior, indices=[0, 1]),
+                PriorComponent(prior_fn=uniform_prior, indices=[2, 3]),
             ],
         )
 
@@ -208,138 +174,11 @@ class TestCompoundPrior:
         ]
 
         # Individual calls
-        individual_results = np.array([scalar_compound(m) for m in models])
+        individual_results = np.array([compound_prior(m) for m in models])
 
         # Batched call
         batched_models = np.array(models)
-        batched_results = vectorised_compound(batched_models)
+        batched_results = compound_prior(batched_models)
 
         assert batched_results.shape == (4,)
         np.testing.assert_allclose(individual_results, batched_results)
-
-
-class TestCompoundPriorConfig:
-    """Tests for CompoundPriorConfig."""
-
-    @pytest.fixture
-    def basic_config_dict(self) -> dict:
-        """Create a basic configuration dictionary."""
-        return {
-            "components": [
-                {
-                    "type": "gaussian",
-                    "mean": [0.0, 0.0],
-                    "inv_covar": [[1.0, 0.0], [0.0, 1.0]],
-                    "indices": [0, 1],
-                },
-                {
-                    "type": "uniform",
-                    "lower_bounds": [-1.0, -1.0],
-                    "upper_bounds": [1.0, 1.0],
-                    "indices": [2, 3],
-                },
-            ]
-        }
-
-    def test_config_default_vectorised(self, basic_config_dict: dict) -> None:
-        """Test that vectorised defaults to True."""
-        config = CompoundPriorConfig.from_dict(basic_config_dict)
-        assert config.vectorised is True
-
-    def test_config_explicit_vectorised_true(self, basic_config_dict: dict) -> None:
-        """Test that vectorised can be explicitly set to True."""
-        basic_config_dict["vectorised"] = True
-        config = CompoundPriorConfig.from_dict(basic_config_dict)
-        assert config.vectorised is True
-
-    def test_config_explicit_vectorised_false(self, basic_config_dict: dict) -> None:
-        """Test that vectorised can be set to False."""
-        basic_config_dict["vectorised"] = False
-        config = CompoundPriorConfig.from_dict(basic_config_dict)
-        assert config.vectorised is False
-
-    def test_config_with_extra_attributes_ignored(
-        self, basic_config_dict: dict
-    ) -> None:
-        """Test that random extra attributes in config_dict are silently ignored."""
-        basic_config_dict["random_attribute_1"] = "should_be_ignored"
-        basic_config_dict["random_attribute_2"] = 42
-        basic_config_dict["another_random_thing"] = [1, 2, 3]
-
-        # Should not raise an error
-        config = CompoundPriorConfig.from_dict(basic_config_dict)
-
-        # Should have default vectorised value
-        assert config.vectorised is True
-
-        # Extra attributes should not be stored in the config
-        assert not hasattr(config, "random_attribute_1")
-        assert not hasattr(config, "random_attribute_2")
-        assert not hasattr(config, "another_random_thing")
-
-    def test_config_to_compound_prior_vectorised_true(
-        self, basic_config_dict: dict
-    ) -> None:
-        """Test that to_compound_prior passes vectorised=True correctly."""
-        basic_config_dict["vectorised"] = True
-        config = CompoundPriorConfig.from_dict(basic_config_dict)
-        prior = config.to_compound_prior()
-
-        # Test that the prior is vectorised by passing a batch
-        models = np.array([[0.0, 0.0, 0.0, 0.0], [1.0, -1.0, 0.5, -0.5]])
-        result = prior(models)
-
-        assert isinstance(result, np.ndarray)
-        assert result.shape == (2,)
-
-    def test_config_to_compound_prior_vectorised_false(
-        self, basic_config_dict: dict
-    ) -> None:
-        """Test that to_compound_prior passes vectorised=False correctly."""
-        basic_config_dict["vectorised"] = False
-        config = CompoundPriorConfig.from_dict(basic_config_dict)
-        prior = config.to_compound_prior()
-
-        # Test that the prior is not vectorised by passing a single model
-        model = np.array([0.0, 0.0, 0.0, 0.0])
-        result = prior(model)
-
-        assert isinstance(result, (float | np.floating))
-
-    def test_config_from_dict_preserves_components(
-        self, basic_config_dict: dict
-    ) -> None:
-        """Test that from_dict correctly parses component configurations."""
-        config = CompoundPriorConfig.from_dict(basic_config_dict)
-
-        assert len(config.components) == 2
-        assert config.components[0].type == "gaussian"
-        assert config.components[1].type == "uniform"
-
-    def test_config_with_vectorised_and_extra_attrs(
-        self, basic_config_dict: dict
-    ) -> None:
-        """Test that vectorised is preserved when extra attributes are present."""
-        basic_config_dict["vectorised"] = False
-        basic_config_dict["extra_1"] = "ignored"
-        basic_config_dict["extra_2"] = 123
-
-        config = CompoundPriorConfig.from_dict(basic_config_dict)
-
-        assert config.vectorised is False
-        assert not hasattr(config, "extra_1")
-        assert not hasattr(config, "extra_2")
-
-    def test_compound_prior_from_dict_class_method(
-        self, basic_config_dict: dict
-    ) -> None:
-        """Test CompoundPrior.from_dict uses CompoundPriorConfig correctly."""
-        basic_config_dict["vectorised"] = False
-        prior = CompoundPrior.from_dict(basic_config_dict)
-
-        # Test that it's a non-vectorised prior
-        model = np.array([0.0, 0.0, 0.0, 0.0])
-        result = prior(model)
-
-        assert isinstance(result, (float | np.floating))
-        assert prior.n == 4

@@ -111,7 +111,7 @@ def test_sddr_vs_ris():
         inv_cov=inv_cov,
     )
 
-    mcmc_cfg = MCMCConfig(nwalkers=100, nsteps=6000, burn_in=1000)
+    mcmc_cfg = MCMCConfig(nwalkers=100, nsteps=6000, burn_in=1000, parallel=False)
 
     super_samples, super_ln_prob = mcmc(
         n_params,

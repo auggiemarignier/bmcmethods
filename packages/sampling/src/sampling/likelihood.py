@@ -9,11 +9,7 @@ class GaussianLikelihood:
     """
     Represents a Gaussian likelihood function for MCMC sampling.
 
-    The Gaussian likelihood assumes that the observed data is normally distributed
-    around the model predictions, with a specified inverse covariance matrix.
-
-    This implementation is fully vectorised and handles both single parameter
-    evaluation and batch evaluation transparently.
+    The Gaussian likelihood assumes that the observed data is normally distributed around the model predictions, with a specified inverse covariance matrix.
     """
 
     def __init__(
@@ -21,7 +17,6 @@ class GaussianLikelihood:
         forward_fn: Callable[[np.ndarray], np.ndarray],
         observed_data: np.ndarray,
         inv_covar: float | np.ndarray,
-        vectorised: bool = True,
         validate_covariance: bool = True,
         example_model: None | np.ndarray = None,
     ) -> None:
@@ -38,10 +33,6 @@ class GaussianLikelihood:
         inv_covar : float | ndarray, shape (1,), (n,) or (n, n)
             Inverse covariance matrix of the observed data. Either a full matrix of shape (n, n),
             a diagonal represented as a vector of shape (n,), or a scalar representing uniform variance.
-        vectorised : bool, optional
-            If True, the likelihood ``__call__`` method expects batched model parameters of shape ``(batch, ndim)``;
-            if False, it expects a single parameter vector of shape ``(ndim,)``. Note that ``forward_fn`` must always
-            accept batched inputs of shape ``(..., ndim)`` and return outputs of shape ``(..., n)``. Default is True.
         validate_covariance : bool, optional
             Whether to validate the inverse covariance matrix. Default is True.
         example_model : None | ndarray, optional
@@ -62,9 +53,8 @@ class GaussianLikelihood:
         self.observed_data = observed_data
         self.inv_covar = np.array(inv_covar)
         self._exp_term_fn = self._choose_exponential_term_function()
-        self._call_fn = self._call_vectorised if vectorised else self._call_scalar
 
-    def __call__(self, model_params: np.ndarray) -> float | np.ndarray:
+    def __call__(self, model_params: np.ndarray) -> np.ndarray:
         """
         Evaluate the log-likelihood for given model parameters.
 
@@ -75,21 +65,13 @@ class GaussianLikelihood:
 
         Returns
         -------
-        log_likelihood : float | ndarray
-            The log-likelihood value(s). Returns a scalar if input is 1D,
-            or an array of shape (batch,) if input is 2D.
+        log_likelihood : ndarray
+            The log-likelihood value(s).
         """
-        return self._call_fn(model_params)
-
-    def _call_scalar(self, model_params: np.ndarray) -> float:
-        predicted = self.forward_fn(model_params[None, :])
-        residuals = self.observed_data[None, :] - predicted  # (1, n)
-        return self._exp_term_fn(residuals)[0]
-
-    def _call_vectorised(self, model_params: np.ndarray) -> np.ndarray:
-        predicted = self.forward_fn(model_params)  # (batch, n)
-        residuals = self.observed_data[None, :] - predicted  # (batch, n)
-        return self._exp_term_fn(residuals)
+        model_params = np.atleast_2d(model_params)  # Ensure shape is (batch, ndim)
+        predicted = self.forward_fn(model_params)
+        residuals = self.observed_data[None, :] - predicted
+        return self._exp_term_fn(residuals).squeeze()  # Return scalar if input was 1D
 
     def _choose_exponential_term_function(self) -> Callable[[np.ndarray], np.ndarray]:
         """

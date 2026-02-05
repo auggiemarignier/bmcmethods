@@ -23,14 +23,10 @@ class PriorComponent:
     indices : Sequence[int] | slice | np.ndarray
         Indices of the model parameters that this prior component applies to.
         Will be converted to a sorted numpy array internally.
-    vectorised : bool, optional
-        If True, the prior function expects batched inputs (shape (batch_size, n)).
-        If False, expects single model inputs (shape (n,)). Default is True.
     """
 
     prior_fn: PriorFunction
     indices: Sequence[int] | slice | np.ndarray
-    vectorised: bool = True
 
     def __post_init__(self) -> None:
         """Convert indices to a normalized numpy array."""
