@@ -127,21 +127,15 @@ class GaussianPriorComponentConfig:
         mean: list[float] | np.ndarray,
         inv_covar: list[list[float]] | np.ndarray,
         indices: list[int],
-        vectorised: bool = True,
     ) -> None:
         self.mean = mean
         self.inv_covar = inv_covar
         self.indices = indices
-        self.vectorised = vectorised
 
     def to_prior_component(self) -> PriorComponent:
         """Build a PriorComponent from this config."""
         mean = np.asarray(self.mean)
         inv_covar = np.asarray(self.inv_covar)
-        prior_fn = GaussianPrior(
-            mean=mean, inv_covar=inv_covar, vectorised=self.vectorised
-        )
+        prior_fn = GaussianPrior(mean=mean, inv_covar=inv_covar)
 
-        return PriorComponent(
-            prior_fn=prior_fn, indices=self.indices, vectorised=self.vectorised
-        )
+        return PriorComponent(prior_fn=prior_fn, indices=self.indices)

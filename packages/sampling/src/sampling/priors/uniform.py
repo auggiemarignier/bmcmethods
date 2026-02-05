@@ -109,21 +109,15 @@ class UniformPriorComponentConfig:
         lower_bounds: list[float] | np.ndarray,
         upper_bounds: list[float] | np.ndarray,
         indices: list[int],
-        vectorised: bool = True,
     ) -> None:
         self.lower_bounds = lower_bounds
         self.upper_bounds = upper_bounds
         self.indices = indices
-        self.vectorised = vectorised
 
     def to_prior_component(self) -> PriorComponent:
         """Build a PriorComponent from this config."""
         lower = np.asarray(self.lower_bounds)
         upper = np.asarray(self.upper_bounds)
-        prior_fn = UniformPrior(
-            lower_bounds=lower, upper_bounds=upper, vectorised=self.vectorised
-        )
+        prior_fn = UniformPrior(lower_bounds=lower, upper_bounds=upper)
 
-        return PriorComponent(
-            prior_fn=prior_fn, indices=self.indices, vectorised=self.vectorised
-        )
+        return PriorComponent(prior_fn=prior_fn, indices=self.indices)
