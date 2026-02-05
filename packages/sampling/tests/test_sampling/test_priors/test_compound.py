@@ -125,8 +125,8 @@ class TestCompoundPrior:
         model = np.array([[0.0, 0.0, 0.0, 0.0]])
         log_priors = vectorised_compound_prior(model)
 
-        assert log_priors.shape == (1,)
-        assert np.isfinite(log_priors[0])
+        assert log_priors.ndim == 0
+        assert np.isfinite(log_priors)
 
     def test_compound_prior_vectorised_multiple_models(self, vectorised_compound_prior):
         """Test that vectorised evaluation works for multiple models."""

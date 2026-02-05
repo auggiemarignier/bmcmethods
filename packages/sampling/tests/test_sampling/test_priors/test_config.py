@@ -91,14 +91,14 @@ class TestUniformPriorComponentConfig:
         # In bounds
         params_in = np.array([[0.5, 0.5]])
         result = component.prior_fn(params_in)
-        assert result.shape == (1,)
-        assert result[0] == 0.0
+        assert result.shape == ()
+        assert result == 0.0
 
         # Out of bounds
         params_out = np.array([[1.5, 0.5]])
         result = component.prior_fn(params_out)
-        assert result.shape == (1,)
-        assert result[0] == -np.inf
+        assert result.shape == ()
+        assert result == -np.inf
 
     def test_to_prior_component_invalid_bounds(self) -> None:
         """Test that invalid bounds raise ValueError when building component."""
@@ -122,11 +122,11 @@ class TestUniformPriorComponentConfig:
         component = config.to_prior_component()
         assert component.n == 1
         result = component.prior_fn(np.array([[7.0]]))
-        assert result.shape == (1,)
-        assert result[0] == component.prior_fn._normalisation
+        assert result.shape == ()
+        assert result == component.prior_fn._normalisation
         result_out = component.prior_fn(np.array([[11.0]]))
-        assert result_out.shape == (1,)
-        assert result_out[0] == -np.inf
+        assert result_out.shape == ()
+        assert result_out == -np.inf
 
 
 class TestGaussianPriorComponentConfig:
@@ -206,16 +206,16 @@ class TestGaussianPriorComponentConfig:
         component = config.to_prior_component()
 
         # At the mean
-        result = component.prior_fn(np.array([[0.0, 0.0]]))
-        assert result.shape == (1,)
-        assert result[0] == component.prior_fn._normalisation
+        result = component.prior_fn(np.array([0.0, 0.0]))
+        assert result.shape == ()
+        assert result == component.prior_fn._normalisation
 
         # Away from mean
-        log_prior = component.prior_fn(np.array([[1.0, 1.0]]))
-        assert log_prior.shape == (1,)
-        assert log_prior[0] < 0.0
+        log_prior = component.prior_fn(np.array([1.0, 1.0]))
+        assert log_prior.shape == ()
+        assert log_prior < 0.0
         np.testing.assert_almost_equal(
-            log_prior[0], -1.0 + component.prior_fn._normalisation
+            log_prior, -1.0 + component.prior_fn._normalisation
         )
 
     def test_to_prior_component_with_correlation(self) -> None:
@@ -230,10 +230,12 @@ class TestGaussianPriorComponentConfig:
 
         # Check it creates valid prior
         assert isinstance(component.prior_fn, GaussianPrior)
-        log_prior = component.prior_fn(np.array([[1.0, 1.0]]))
-        assert log_prior.shape == (1,)
-        assert np.isfinite(log_prior[0])
-        assert log_prior[0] < 0.0
+        log_prior = component.prior_fn(
+            np.array([[1.0, 1.0]])
+        )  # Test 2D input but with only one model
+        assert log_prior.shape == ()
+        assert np.isfinite(log_prior)
+        assert log_prior < 0.0
 
     def test_to_prior_component_invalid_non_symmetric(self) -> None:
         """Test that non-symmetric covariance raises ValueError."""
@@ -267,9 +269,9 @@ class TestGaussianPriorComponentConfig:
 
         component = config.to_prior_component()
         assert component.n == 1
-        result = component.prior_fn(np.array([[5.0]]))
-        assert result.shape == (1,)
-        assert result[0] == component.prior_fn._normalisation
+        result = component.prior_fn(np.array([5.0]))
+        assert result.shape == ()
+        assert result == component.prior_fn._normalisation
 
 
 class TestCompoundPriorConfig:
@@ -469,12 +471,12 @@ class TestCompoundPriorConfig:
         prior = config.to_compound_prior()
 
         # Valid parameters
-        params_valid = np.array([[0.0, 0.0, 0.5, 0.5, 0.0, 0.0]])
+        params_valid = np.array([0.0, 0.0, 0.5, 0.5, 0.0, 0.0])
         log_prior = prior(params_valid)
 
         # At the means and within uniform bounds
         np.testing.assert_almost_equal(
-            log_prior[0],
+            log_prior,
             sum(
                 component.prior_fn._normalisation
                 for component in prior.prior_components
@@ -483,10 +485,10 @@ class TestCompoundPriorConfig:
 
         # Invalid parameters (outside uniform bounds)
         params_invalid = np.array(
-            [[0.0, 0.0, 2.0, 0.5, 0.0, 0.0]]
+            [0.0, 0.0, 2.0, 0.5, 0.0, 0.0]
         )  # Full parameter set with out-of-bounds uniform values
         log_prior = prior(params_invalid)
-        np.testing.assert_almost_equal(log_prior[0], -np.inf)
+        np.testing.assert_almost_equal(log_prior, -np.inf)
 
     def test_compound_prior_from_dict_convenience_method(self) -> None:
         """Test CompoundPrior.from_dict convenience method."""
@@ -613,17 +615,17 @@ class TestCompoundPriorConfig:
 
         # Test with realistic values
         params = np.array(
-            [[5800.0, 3200.0, 2700.0, 0.0, 0.0]]
+            [5800.0, 3200.0, 2700.0, 0.0, 0.0]
         )  # At the means and within uniform bounds
         log_prior = prior(params)
-        assert log_prior[0] == sum(
+        assert log_prior == sum(
             component.prior_fn._normalisation for component in prior.prior_components
         )
 
         # Test with parameters outside uniform bounds
-        params_out = np.array([[5800.0, 3200.0, 2700.0, 1.0, 0.0]])
+        params_out = np.array([5800.0, 3200.0, 2700.0, 1.0, 0.0])
         log_prior_out = prior(params_out)
-        assert log_prior_out[0] == -np.inf
+        assert log_prior_out == -np.inf
 
 
 class TestCompoundPriorConfigValidation:

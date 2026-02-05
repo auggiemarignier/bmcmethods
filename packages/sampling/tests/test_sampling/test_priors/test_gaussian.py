@@ -175,8 +175,8 @@ def test_gaussian_prior_vectorised_single_model() -> None:
     params = np.array([[0.0, 0.0]])
     log_priors = prior(params)
 
-    assert log_priors.shape == (1,)
-    assert log_priors[0] == prior._normalisation
+    assert log_priors.ndim == 0
+    assert log_priors == prior._normalisation
 
 
 def test_gaussian_prior_vectorised_multiple_models() -> None:

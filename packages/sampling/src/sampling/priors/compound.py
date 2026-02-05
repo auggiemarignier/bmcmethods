@@ -61,7 +61,7 @@ class CompoundPrior:
             c for c in prior_components if not isinstance(c.prior_fn, UniformPrior)
         ]
 
-    def __call__(self, model_params: np.ndarray) -> float | np.ndarray:
+    def __call__(self, model_params: np.ndarray) -> np.ndarray:
         """Compound log-prior.
 
         Parameters
@@ -71,7 +71,7 @@ class CompoundPrior:
 
         Returns
         -------
-        float or ndarray, shape (...)
+        ndarray, shape (...) or scalar (0D array)
         """
         model_params = np.atleast_2d(model_params)  # shape (batch_size, n)
         batch_size = model_params.shape[0]
@@ -82,7 +82,9 @@ class CompoundPrior:
 
         for component in prior_components:
             params_subset = model_params[:, component.indices]
-            component_log_priors = component.prior_fn(params_subset)
+            component_log_priors = np.atleast_1d(
+                component.prior_fn(params_subset)
+            )  # make sure it's 1D for consistent indexing
 
             # Check for -inf values (out of bounds)
             invalid_mask = np.isneginf(component_log_priors)

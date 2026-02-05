@@ -8,18 +8,14 @@ import numpy as np
 from sampling.sampling import MCMCConfig, mcmc
 
 
-def likelihood_fn(theta: np.ndarray) -> float | np.ndarray:
+def likelihood_fn(theta: np.ndarray) -> np.ndarray:
     """Simple log-probability: standard normal (up to additive constant).
 
     Not in a fixture because needs to be top-level for pickling in multiprocessing.
     Supports both scalar (1D) and vectorised (2D) inputs.
     """
-    if theta.ndim == 1:
-        # Single model: shape (ndim,)
-        return -0.5 * float(theta @ theta)
-    else:
-        # Batch of models: shape (batch, ndim)
-        return -0.5 * np.sum(theta * theta, axis=1)
+    theta = np.atleast_2d(theta)
+    return -0.5 * np.sum(theta * theta, axis=1).squeeze()
 
 
 class LogPrior:
@@ -29,11 +25,9 @@ class LogPrior:
     Supports both scalar (1D) and vectorised (2D) inputs.
     """
 
-    def __call__(self, model_params: np.ndarray) -> float | np.ndarray:
-        if model_params.ndim == 1:
-            return 0.0
-        else:
-            return np.zeros(model_params.shape[0])
+    def __call__(self, model_params: np.ndarray) -> np.ndarray:
+        model_params = np.atleast_2d(model_params)
+        return np.zeros(model_params.shape[0]).squeeze()
 
     def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
         """Sample from standard normal prior."""

@@ -58,7 +58,7 @@ class GaussianLikelihood:
         self.inv_covar = np.array(inv_covar)
         self._exp_term_fn = self._choose_exponential_term_function()
 
-    def __call__(self, model_params: np.ndarray) -> float | np.ndarray:
+    def __call__(self, model_params: np.ndarray) -> np.ndarray:
         """
         Evaluate the log-likelihood for given model parameters.
 
@@ -69,9 +69,8 @@ class GaussianLikelihood:
 
         Returns
         -------
-        log_likelihood : float | ndarray
-            The log-likelihood value(s). Returns a scalar if input is 1D,
-            or an array of shape (batch,) if input is 2D.
+        log_likelihood : ndarray
+            The log-likelihood value(s).
         """
         model_params = np.atleast_2d(model_params)  # Ensure shape is (batch, ndim)
         predicted = self.forward_fn(model_params)

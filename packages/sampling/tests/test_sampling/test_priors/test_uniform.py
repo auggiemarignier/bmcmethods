@@ -196,8 +196,8 @@ def test_uniform_prior_vectorised_single_model(
     params = np.array([[0.5, 0.5]])
     log_priors = vectorised_uniform_prior(params)
 
-    assert log_priors.shape == (1,)
-    assert log_priors[0] == vectorised_uniform_prior._normalisation
+    assert log_priors.ndim == 0
+    assert log_priors == vectorised_uniform_prior._normalisation
 
 
 def test_uniform_prior_vectorised_multiple_models(

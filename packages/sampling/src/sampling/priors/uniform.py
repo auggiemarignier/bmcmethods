@@ -42,7 +42,7 @@ class UniformPrior:
         self._volume = np.prod(upper_bounds - lower_bounds)
         self._normalisation = -np.log(self._volume)
 
-    def __call__(self, model_params: np.ndarray) -> float | np.ndarray:
+    def __call__(self, model_params: np.ndarray) -> np.ndarray:
         """Uniform log-prior.
 
         Parameters
@@ -51,7 +51,7 @@ class UniformPrior:
 
         Returns
         -------
-        float or ndarray, shape (...)
+        ndarray, shape (...) or scalar (0D array)
         """
         model_params = np.atleast_2d(model_params)  # shape (batch_size, n)
         out_of_bounds = np.any(

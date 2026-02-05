@@ -33,7 +33,7 @@ class GaussianPrior:
             + 0.5 * np.linalg.slogdet(self.inv_covar)[1]
         )
 
-    def __call__(self, model_params: np.ndarray) -> float | np.ndarray:
+    def __call__(self, model_params: np.ndarray) -> np.ndarray:
         """Gaussian log-prior.
 
         Parameters
@@ -42,7 +42,7 @@ class GaussianPrior:
 
         Returns
         -------
-        float or ndarray, shape (...)
+        ndarray, shape (...) or scalar (0D array)
         """
         model_params = np.atleast_2d(model_params)  # shape (batch_size, n)
         diff = model_params - self.mean

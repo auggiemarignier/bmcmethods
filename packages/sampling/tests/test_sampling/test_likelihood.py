@@ -339,7 +339,8 @@ class TestVectorisedVsScalar:
         )
 
         result = likelihood(self.model_params_single)
-        assert isinstance(result, float)
+        assert isinstance(result, np.ndarray)
+        assert result.ndim == 0  # scalar array
 
     def test_vectorised_return_type(self):
         """Test that vectorised mode returns array for batch input."""
