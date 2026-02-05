@@ -39,9 +39,6 @@ class CompoundPrior:
     prior_components : Sequence[PriorComponent]
         Sequence of PriorComponent instances, each specifying a prior and the indices
         of the model parameters it applies to.
-    vectorised : bool, optional
-        If True, the prior can evaluate batches of models (shape (batch_size, n)).
-        If False, evaluates single models (shape (n,)). Default is True.
 
     Raises
     ------
@@ -53,9 +50,7 @@ class CompoundPrior:
         If the prior components do not cover the expected number of parameters, or if there is overlap.
     """
 
-    def __init__(
-        self, prior_components: Sequence[PriorComponent], vectorised: bool = False
-    ) -> None:
+    def __init__(self, prior_components: Sequence[PriorComponent]) -> None:
         self.prior_components = prior_components
         self._n = sum(c.n for c in prior_components)
 
@@ -65,54 +60,20 @@ class CompoundPrior:
         self._non_uniform_components = [
             c for c in prior_components if not isinstance(c.prior_fn, UniformPrior)
         ]
-        self._call_fn = self._call_vectorised if vectorised else self._call_single
 
     def __call__(self, model_params: np.ndarray) -> float | np.ndarray:
         """Compound log-prior.
 
         Parameters
         ----------
-        model_params : ndarray
-            If vectorised=False: shape (n,) for single model evaluation.
-            If vectorised=True: shape (batch_size, n) for batch evaluation.
+        model_params : ndarray, shape (..., n)
+            Model parameters to evaluate the prior on.
 
         Returns
         -------
-        float or ndarray
-            If vectorised=False: scalar log-prior value.
-            If vectorised=True: array of shape (batch_size,) with log-prior values.
+        float or ndarray, shape (...)
         """
-        return self._call_fn(model_params)
-
-    def _call_single(self, model_params: np.ndarray) -> float:
-        """Compound log-prior for a single model."""
-        # Bring any UniformPriors to the front for early exit
-        prior_components = chain(self._uniform_components, self._non_uniform_components)
-
-        total_log_prior = 0.0
-        for component in prior_components:
-            params_subset = model_params[component.indices]
-            component_log_prior = component.prior_fn(params_subset)
-
-            if np.isneginf(component_log_prior):
-                return -np.inf  # Early exit if any component is -inf
-
-            total_log_prior += component_log_prior
-        return total_log_prior
-
-    def _call_vectorised(self, model_params: np.ndarray) -> np.ndarray:
-        """Compound log-prior for a batch of models.
-
-        Parameters
-        ----------
-        model_params : ndarray, shape (batch_size, n)
-            Batch of model parameters.
-
-        Returns
-        -------
-        log_priors : ndarray, shape (batch_size,)
-            Log-prior values for each model.
-        """
+        model_params = np.atleast_2d(model_params)  # shape (batch_size, n)
         batch_size = model_params.shape[0]
         total_log_priors = np.zeros(batch_size)
 
@@ -132,7 +93,7 @@ class CompoundPrior:
             valid_mask = ~invalid_mask
             total_log_priors[valid_mask] += component_log_priors[valid_mask]
 
-        return total_log_priors
+        return total_log_priors.squeeze()  # Return scalar if input was 1D
 
     def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
         """Sample from the compound prior.

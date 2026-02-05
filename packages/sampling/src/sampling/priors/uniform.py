@@ -15,9 +15,6 @@ class UniformPrior:
         Lower bounds of the uniform prior.
     upper_bounds : ndarray, shape (n,)
         Upper bounds of the uniform prior.
-    vectorised : bool, optional
-        If True, the prior can evaluate batches of models (shape (batch_size, n)).
-        If False, evaluates single models (shape (n,)). Default is True.
 
     Raises
     ------
@@ -30,7 +27,6 @@ class UniformPrior:
         self,
         lower_bounds: np.ndarray,
         upper_bounds: np.ndarray,
-        vectorised: bool = False,
     ) -> None:
         if lower_bounds.shape != upper_bounds.shape:
             raise ValueError(
@@ -45,52 +41,26 @@ class UniformPrior:
         self._n = lower_bounds.size
         self._volume = np.prod(upper_bounds - lower_bounds)
         self._normalisation = -np.log(self._volume)
-        self._call_fn = self._call_vectorised if vectorised else self._call_single
 
     def __call__(self, model_params: np.ndarray) -> float | np.ndarray:
         """Uniform log-prior.
 
         Parameters
         ----------
-        model_params : ndarray
-            If vectorised=False: shape (n,) for single model evaluation.
-            If vectorised=True: shape (batch_size, n) for batch evaluation.
+        model_params : ndarray, shape (..., n)
 
         Returns
         -------
-        float or ndarray
-            If vectorised=False: scalar log-prior value.
-            If vectorised=True: array of shape (batch_size,) with log-prior values.
+        float or ndarray, shape (...)
         """
-        return self._call_fn(model_params)
-
-    def _call_single(self, model_params: np.ndarray) -> float:
-        """Uniform log-prior for a single model."""
-        out_of_bounds = np.any(
-            (model_params < self.lower_bounds) | (model_params > self.upper_bounds)
-        )
-        return -np.inf if out_of_bounds else self._normalisation
-
-    def _call_vectorised(self, model_params: np.ndarray) -> np.ndarray:
-        """Uniform log-prior for a batch of models.
-
-        Parameters
-        ----------
-        model_params : ndarray, shape (batch_size, n)
-            Batch of model parameters.
-
-        Returns
-        -------
-        log_priors : ndarray, shape (batch_size,)
-            Log-prior values for each model.
-        """
+        model_params = np.atleast_2d(model_params)  # shape (batch_size, n)
         out_of_bounds = np.any(
             (model_params < self.lower_bounds) | (model_params > self.upper_bounds),
             axis=1,
         )
         log_priors = np.full(model_params.shape[0], self._normalisation)
         log_priors[out_of_bounds] = -np.inf
-        return log_priors
+        return log_priors.squeeze()  # Return scalar if input was 1D
 
     def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
         """Sample from the Uniform prior.
