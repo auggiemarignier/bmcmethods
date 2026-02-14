@@ -1,14 +1,16 @@
 """Tests for the SDDR calculation functions."""
 
+from dataclasses import FrozenInstanceError, fields
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
-from harmonic.model import RQSplineModel
+from harmonic.model import RealNVPModel, RQSplineModel
 from sampling.priors import CompoundPrior, GaussianPrior, PriorComponent
 from sddr.sddr import (
     FlowConfig,
     RealNVPConfig,
+    RQSplineConfig,
     TrainConfig,
     fit_marginalised_posterior,
     sddr,
@@ -158,3 +160,39 @@ class TestSDDR:
 
         assert isinstance(result, float)
         assert not isinstance(result, np.floating)
+
+
+def test_RealNVPConfig_model_cls() -> None:
+    """Test that RealNVPConfig returns the correct model class."""
+    config = RealNVPConfig()
+    assert config.model_cls() == RealNVPModel
+
+
+def test_RQSplineConfig_model_cls() -> None:
+    """Test that RQSplineConfig returns the correct model class."""
+    config = RQSplineConfig()
+    assert config.model_cls() == RQSplineModel
+
+
+def test_FlowConfig_cannot_initialise_temperature() -> None:
+    """Test that temperature cannot be set in FlowConfig."""
+    with pytest.raises(TypeError):
+        FlowConfig(temperature=0.5)
+
+
+def test_FlowConfig_temperature_is_fixed() -> None:
+    """Test that temperature is fixed to 1.0 in FlowConfig."""
+    config = FlowConfig()
+    assert config.temperature == 1.0
+
+
+@pytest.mark.parametrize(
+    "config_class", [RealNVPConfig, RQSplineConfig, FlowConfig, TrainConfig]
+)
+def test_config_classes_are_frozen(config_class) -> None:
+    """Test that config dataclasses are frozen."""
+    config = config_class()
+    field_names = [field.name for field in fields(config_class)]
+    for field_name in field_names:
+        with pytest.raises(FrozenInstanceError):
+            setattr(config, field_name, 123)
