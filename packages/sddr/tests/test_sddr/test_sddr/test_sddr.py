@@ -4,9 +4,10 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
+from harmonic.model import RQSplineModel
 from sampling.priors import CompoundPrior, GaussianPrior, PriorComponent
 from sddr.sddr import (
-    KDEModel,
+    FlowConfig,
     RealNVPConfig,
     TrainConfig,
     fit_marginalised_posterior,
@@ -66,16 +67,17 @@ class TestFitMarginalisedPosterior:
         assert isinstance(model, FlowModel)
 
     def test_single_parameter_marginalisation(self, samples: np.ndarray) -> None:
-        """Test marginalisation to a single parameter."""
+        """Test marginalisation to a single parameter returns a RQSplineModel even if RealNVP is requested."""
 
         marginal_indices = [2]
 
-        with pytest.warns(
-            UserWarning, match="Marginalising down to 1D; using KDEModel"
-        ):
-            model = fit_marginalised_posterior(samples, marginal_indices)
+        flow_config = FlowConfig(flow_type="RealNVP")
+        with pytest.warns(UserWarning, match="1D"):
+            model = fit_marginalised_posterior(
+                samples, marginal_indices, flow_config=flow_config
+            )
 
-        assert isinstance(model, KDEModel)
+        assert isinstance(model, RQSplineModel)
 
     def test_all_parameters(self, samples: np.ndarray) -> None:
         """Test keeping all parameters (no marginalisation)."""
@@ -223,27 +225,3 @@ class TestConfigs:
         assert config.batch_size == 128
         assert config.epochs == 50
         assert config.verbose is False
-
-
-class TestKDEModel:
-    """Tests for the KDEModel class."""
-
-    @pytest.fixture
-    def kde(self, rng) -> KDEModel:
-        """Sample data for testing."""
-        return KDEModel(rng.standard_normal((200, 1)))
-
-    def test_kde_model_initialization(self, kde) -> None:
-        """Test that KDEModel initializes without error."""
-
-        assert kde is not None
-        assert hasattr(kde, "predict")
-
-    def test_kde_model_predict(self, kde) -> None:
-        """Test that KDEModel predict method returns log densities."""
-
-        test_points = np.array([[0.0], [1.0], [-1.0]])
-        log_densities = kde.predict(test_points)
-
-        assert log_densities.shape == (3,)
-        assert np.all(np.isfinite(log_densities))
