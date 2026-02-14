@@ -1,13 +1,15 @@
 """Functions for calculating the Savage-Dickey density ratio."""
 
-from dataclasses import asdict, dataclass
+from abc import ABC, abstractmethod
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass, field, replace
+from typing import Any, Literal
 from warnings import warn
 
 import harmonic as hm
 import numpy as np
-from harmonic.model import RealNVPModel
+from harmonic.model import RealNVPModel, RQSplineModel
 from sampling.priors import CompoundPrior
-from scipy.stats import gaussian_kde
 
 from .marginalisation import marginalise_samples
 
@@ -25,7 +27,17 @@ class TrainConfig:
 
 
 @dataclass(frozen=True)
-class RealNVPConfig:
+class ModelConfig(ABC):
+    """Base for model-specific configs exposing the model class."""
+
+    @abstractmethod
+    def model_cls(self) -> Any:
+        """Return the corresponding model class for this config."""
+        ...
+
+
+@dataclass(frozen=True)
+class RealNVPConfig(ModelConfig):
     """Configuration of the RealNVP model.
 
     Just the list of parameters taken by hm.model.RealNVPModel.
@@ -33,51 +45,58 @@ class RealNVPConfig:
 
     n_scaled_layers: int = 2
     n_unscaled_layers: int = 4
-    learning_rate: float = 1e-3
-    momentum: float = 0.9
-    standardize: bool = False
-    temperature: float = 0.8
+
+    def model_cls(self) -> Any:
+        """Return the RealNVPModel class."""
+        return RealNVPModel
 
 
-class KDEModel:
-    """Kernel Density Estimation model.
+@dataclass(frozen=True)
+class RQSplineConfig(ModelConfig):
+    """Configuration of the RQSpline model.
 
-    Used as a fallback in the case where we marginalise down to 1D and RealNVP is not suitable.
+    Just the list of parameters taken by hm.model.RQSplineModel.
     """
 
-    def __init__(self, samples: np.ndarray) -> None:
-        """Initialize the KDE model with given samples.
+    n_layers: int = 8
+    n_bins: int = 8
+    hidden_size: Sequence[int] = (64, 64)
+    spline_range: Sequence[float] = (-10.0, 10.0)
 
-        Parameters
-        ----------
-        samples : ndarray, shape (num_samples, 1)
-            Samples from the distribution to fit.
-        """
-        self.kde = gaussian_kde(samples.T)
+    def model_cls(self) -> Any:
+        """Return the RQSplineModel class."""
+        return RQSplineModel
 
-    def predict(self, x: np.ndarray) -> np.ndarray:
-        """Predict the log density at given points.
 
-        Parameters
-        ----------
-        x : ndarray, shape (..., k)
-            Points at which to evaluate the density.
+@dataclass(frozen=True)
+class FlowConfig:
+    """Configuration of the flow model.
 
-        Returns
-        -------
-        log_density : ndarray, shape (...,)
-            Log density values at the given points.
-        """
-        density = np.atleast_1d(self.kde(x.T))
-        return np.log(density)
+    Just the list of parameters taken by hm.model.FlowModel, plus a choice of flow type (RealNVP or RQSpline).
+
+    `temperature` is different to the default in `harmonic` because for SDDR we don't want tempering.
+    """
+
+    flow_type: Literal["RealNVP", "RQSpline"] = "RQSpline"
+    model_config: ModelConfig | None = None
+    standardize: bool = False
+    learning_rate: float = 1e-3
+    momentum: float = 0.9
+    temperature: float = field(default=1.0, init=False)  # No tempering for SDDR
+
+
+default_model_configs = {
+    "RealNVP": RealNVPConfig(),
+    "RQSpline": RQSplineConfig(),
+}
 
 
 def fit_marginalised_posterior(
     samples: np.ndarray,
     marginal_indices: list[int],
-    model_config: RealNVPConfig | None = None,
+    flow_config: FlowConfig | None = None,
     train_config: TrainConfig | None = None,
-) -> hm.model.FlowModel | KDEModel:
+) -> hm.model.FlowModel:
     """Fit a flow model to the marginalised posterior samples.
 
     Parameters
@@ -86,38 +105,52 @@ def fit_marginalised_posterior(
         MCMC samples of the model parameters.
     marginal_indices : list of int
         Indices of the parameters to keep after marginalisation.
-    model_config : RealNVPConfig, optional
-        Configuration for the RealNVP model. If None, default configuration is used.
+    flow_config : FlowConfig, optional
+        Configuration for the flow model. If None, default configuration is used.
     train_config : TrainConfig, optional
         Configuration for training the flow model. If None, default configuration is used.
 
     Returns
     -------
-    model : FlowModel | KDEModel
-        Fitted flow/KDE model to the marginalised posterior.
+    model : FlowModel
+        Fitted flow model to the marginalised posterior.
     """
-    marginalised_samples = marginalise_samples(samples, marginal_indices)
+    if flow_config is None:
+        flow_config = FlowConfig()
 
-    if len(marginal_indices) == 1:
+    # default model_config from flow_type if not provided
+    if flow_config.model_config is None:
+        flow_config = replace(
+            flow_config, model_config=default_model_configs[flow_config.flow_type]
+        )
+
+    if len(marginal_indices) == 1 and flow_config.flow_type == "RealNVP":
         warn(
-            "Marginalising down to 1D; using KDEModel instead of RealNVPModel.",
-            UserWarning,
+            "Using RealNVP with a 1D marginal is not supported. Falling back to a default RQSpline model.",
             stacklevel=2,
         )
-        return KDEModel(marginalised_samples)
+        flow_config = replace(
+            flow_config,
+            flow_type="RQSpline",
+            model_config=default_model_configs["RQSpline"],
+        )
 
-    if model_config is None:
-        model_config = RealNVPConfig()
+    marginalised_samples = marginalise_samples(samples, marginal_indices)
+
     if train_config is None:
         train_config = TrainConfig()
 
-    model = RealNVPModel(ndim_in=len(marginal_indices), **asdict(model_config))
+    model_cls = flow_config.model_config.model_cls()
+    flow_cfg = asdict(flow_config)
+    model_cfg = flow_cfg.pop("model_config")
+    _ = flow_cfg.pop("flow_type")
+    model = model_cls(ndim_in=len(marginal_indices), **model_cfg, **flow_cfg)
     model.fit(X=marginalised_samples, **asdict(train_config))
     return model
 
 
 def sddr(
-    marginalised_posterior: hm.model.FlowModel | KDEModel,
+    marginalised_posterior: hm.model.FlowModel,
     marginalised_prior: CompoundPrior,
     nu: np.ndarray,
 ) -> float:
@@ -125,7 +158,7 @@ def sddr(
 
     Parameters
     ----------
-    marginalised_posterior : FlowModel | KDEModel
+    marginalised_posterior : FlowModel
         Fitted flow model or KDE model to the marginalised posterior.
     marginalised_prior : CompoundPrior
         Marginalised prior distribution.
