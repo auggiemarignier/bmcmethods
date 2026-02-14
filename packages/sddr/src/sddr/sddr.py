@@ -86,10 +86,13 @@ class FlowConfig:
 
     def __post_init__(self) -> None:
         """Validate that flow_type and model_config are consistent."""
+        # Always validate flow_type is valid
+        if self.flow_type not in default_model_configs:
+            msg = f"Invalid flow_type '{self.flow_type}'. Must be one of {list(default_model_configs.keys())}."
+            raise ValueError(msg)
+        
+        # If model_config is provided, ensure it matches flow_type
         if self.model_config is not None:
-            if self.flow_type not in default_model_configs:
-                msg = f"Invalid flow_type '{self.flow_type}'. Must be one of {list(default_model_configs.keys())}."
-                raise ValueError(msg)
             expected_config_type = type(default_model_configs[self.flow_type])
             actual_config_type = type(self.model_config)
             if actual_config_type != expected_config_type:
