@@ -159,7 +159,7 @@ def sddr(
     Parameters
     ----------
     marginalised_posterior : FlowModel
-        Fitted flow model or KDE model to the marginalised posterior.
+        Fitted flow model to the marginalised posterior.
     marginalised_prior : CompoundPrior
         Marginalised prior distribution.
     nu : ndarray, shape (k,)
