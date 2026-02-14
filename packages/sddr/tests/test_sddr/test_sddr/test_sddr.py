@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
-from harmonic.model import RealNVPModel, RQSplineModel
+from harmonic.model import FlowModel, RealNVPModel, RQSplineModel
 from sampling.priors import CompoundPrior, GaussianPrior, PriorComponent
 from sddr.sddr import (
     FlowConfig,
@@ -32,19 +32,20 @@ class TestFitMarginalisedPosterior:
         model = fit_marginalised_posterior(samples, marginal_indices)
 
         assert model is not None
+        assert isinstance(model, RQSplineModel)
         assert hasattr(model, "fit")
         assert hasattr(model, "predict")
 
-    def test_custom_model_config(self, samples: np.ndarray) -> None:
-        """Test that custom model config is used."""
+    def test_flow_choice(self, samples: np.ndarray) -> None:
+        """Test that the right type of flow model is returned."""
         marginal_indices = [0, 1]
-        model_config = RealNVPConfig(n_scaled_layers=3, learning_rate=1e-4)
+        flow_config = FlowConfig(flow_type="RealNVP")
 
         model = fit_marginalised_posterior(
-            samples, marginal_indices, model_config=model_config
+            samples, marginal_indices, flow_config=flow_config
         )
 
-        assert model is not None
+        assert isinstance(model, RealNVPModel)
 
     def test_custom_train_config(self, samples: np.ndarray) -> None:
         """Test that custom train config is used."""
@@ -55,18 +56,17 @@ class TestFitMarginalisedPosterior:
             samples, marginal_indices, train_config=train_config
         )
 
-        assert model is not None
+        assert isinstance(model, FlowModel)
 
     def test_marginalisation(self, samples: np.ndarray) -> None:
         """Test that samples are correctly marginalised."""
-        from harmonic.model import FlowModel
-
         marginal_indices = [1, 3]
 
         model = fit_marginalised_posterior(samples, marginal_indices)
 
         # Model should be fitted to 2D marginalised samples
         assert isinstance(model, FlowModel)
+        assert model.ndim == 2
 
     def test_single_parameter_marginalisation(self, samples: np.ndarray) -> None:
         """Test marginalisation to a single parameter returns a RQSplineModel even if RealNVP is requested."""
@@ -87,7 +87,8 @@ class TestFitMarginalisedPosterior:
 
         model = fit_marginalised_posterior(samples, marginal_indices)
 
-        assert model is not None
+        assert isinstance(model, FlowModel)
+        assert model.ndim == 5
 
 
 class TestSDDR:
