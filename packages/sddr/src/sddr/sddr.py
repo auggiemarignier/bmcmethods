@@ -60,8 +60,8 @@ class RQSplineConfig(ModelConfig):
 
     n_layers: int = 8
     n_bins: int = 8
-    hidden_size: Sequence[int] = (64, 64)
-    spline_range: Sequence[float] = (-10.0, 10.0)
+    hidden_size: Sequence[int] = Field(default=(64, 64))
+    spline_range: Sequence[float] = Field(default=(-10.0, 10.0))
 
     def model_cls(self) -> type[RQSplineModel]:
         """Return the RQSplineModel class."""
