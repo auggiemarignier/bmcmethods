@@ -91,7 +91,7 @@ class FlowConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     def model_post_init(self, __context: dict) -> None:
-        """Validate that flow_type and model_config are consistent."""
+        """Validate that flow_type and model_cfg are consistent."""
         # Always validate flow_type is valid
         if self.flow_type not in default_model_configs:
             msg = f"Invalid flow_type '{self.flow_type}'. Must be one of {list(default_model_configs.keys())}."
