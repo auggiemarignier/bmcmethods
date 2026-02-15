@@ -90,7 +90,7 @@ class FlowConfig:
         if self.flow_type not in default_model_configs:
             msg = f"Invalid flow_type '{self.flow_type}'. Must be one of {list(default_model_configs.keys())}."
             raise ValueError(msg)
-        
+
         # If model_config is provided, ensure it matches flow_type
         if self.model_config is not None:
             expected_config_type = type(default_model_configs[self.flow_type])
@@ -101,6 +101,11 @@ class FlowConfig:
                     f"{actual_config_type.__name__}. Expected {expected_config_type.__name__}."
                 )
                 raise ValueError(msg)
+        else:
+            # If model_config is None, set it to the default for the given flow_type
+            object.__setattr__(
+                self, "model_config", default_model_configs[self.flow_type]
+            )
 
 
 default_model_configs = {
