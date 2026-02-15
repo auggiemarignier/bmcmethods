@@ -1,13 +1,16 @@
 """Tests for the SDDR calculation functions."""
 
+from dataclasses import FrozenInstanceError, fields
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
+from harmonic.model import FlowModel, RealNVPModel, RQSplineModel
 from sampling.priors import CompoundPrior, GaussianPrior, PriorComponent
 from sddr.sddr import (
-    KDEModel,
+    FlowConfig,
     RealNVPConfig,
+    RQSplineConfig,
     TrainConfig,
     fit_marginalised_posterior,
     sddr,
@@ -29,19 +32,20 @@ class TestFitMarginalisedPosterior:
         model = fit_marginalised_posterior(samples, marginal_indices)
 
         assert model is not None
+        assert isinstance(model, RQSplineModel)
         assert hasattr(model, "fit")
         assert hasattr(model, "predict")
 
-    def test_custom_model_config(self, samples: np.ndarray) -> None:
-        """Test that custom model config is used."""
+    def test_flow_choice(self, samples: np.ndarray) -> None:
+        """Test that the right type of flow model is returned."""
         marginal_indices = [0, 1]
-        model_config = RealNVPConfig(n_scaled_layers=3, learning_rate=1e-4)
+        flow_config = FlowConfig(flow_type="RealNVP")
 
         model = fit_marginalised_posterior(
-            samples, marginal_indices, model_config=model_config
+            samples, marginal_indices, flow_config=flow_config
         )
 
-        assert model is not None
+        assert isinstance(model, RealNVPModel)
 
     def test_custom_train_config(self, samples: np.ndarray) -> None:
         """Test that custom train config is used."""
@@ -52,30 +56,30 @@ class TestFitMarginalisedPosterior:
             samples, marginal_indices, train_config=train_config
         )
 
-        assert model is not None
+        assert isinstance(model, FlowModel)
 
     def test_marginalisation(self, samples: np.ndarray) -> None:
         """Test that samples are correctly marginalised."""
-        from harmonic.model import FlowModel
-
         marginal_indices = [1, 3]
 
         model = fit_marginalised_posterior(samples, marginal_indices)
 
         # Model should be fitted to 2D marginalised samples
         assert isinstance(model, FlowModel)
+        assert model.ndim == 2
 
     def test_single_parameter_marginalisation(self, samples: np.ndarray) -> None:
-        """Test marginalisation to a single parameter."""
+        """Test marginalisation to a single parameter returns a RQSplineModel even if RealNVP is requested."""
 
         marginal_indices = [2]
 
-        with pytest.warns(
-            UserWarning, match="Marginalising down to 1D; using KDEModel"
-        ):
-            model = fit_marginalised_posterior(samples, marginal_indices)
+        flow_config = FlowConfig(flow_type="RealNVP")
+        with pytest.warns(UserWarning, match="1D"):
+            model = fit_marginalised_posterior(
+                samples, marginal_indices, flow_config=flow_config
+            )
 
-        assert isinstance(model, KDEModel)
+        assert isinstance(model, RQSplineModel)
 
     def test_all_parameters(self, samples: np.ndarray) -> None:
         """Test keeping all parameters (no marginalisation)."""
@@ -83,7 +87,8 @@ class TestFitMarginalisedPosterior:
 
         model = fit_marginalised_posterior(samples, marginal_indices)
 
-        assert model is not None
+        assert isinstance(model, FlowModel)
+        assert model.ndim == 5
 
 
 class TestSDDR:
@@ -158,92 +163,57 @@ class TestSDDR:
         assert not isinstance(result, np.floating)
 
 
-class TestConfigs:
-    """Tests for configuration dataclasses."""
-
-    def test_realnvp_config_defaults(self) -> None:
-        """Test that RealNVPConfig has correct default values."""
-        config = RealNVPConfig()
-
-        assert config.n_scaled_layers == 2
-        assert config.n_unscaled_layers == 4
-        assert config.learning_rate == 1e-3
-        assert config.momentum == 0.9
-        assert config.standardize is False
-        assert config.temperature == 0.8
-
-    def test_train_config_defaults(self) -> None:
-        """Test that TrainConfig has correct default values."""
-        config = TrainConfig()
-
-        assert config.batch_size == 64
-        assert config.epochs == 10
-        assert config.verbose is True
-
-    def test_realnvp_config_frozen(self) -> None:
-        """Test that RealNVPConfig is immutable."""
-        config = RealNVPConfig()
-
-        with pytest.raises(
-            (AttributeError, TypeError)
-        ):  # frozen dataclass raises these
-            config.learning_rate = 0.01  # type: ignore[misc]
-
-    def test_train_config_frozen(self) -> None:
-        """Test that TrainConfig is immutable."""
-        config = TrainConfig()
-
-        with pytest.raises(
-            (AttributeError, TypeError)
-        ):  # frozen dataclass raises these
-            config.epochs = 20  # type: ignore[misc]
-
-    def test_realnvp_config_custom_values(self) -> None:
-        """Test creating RealNVPConfig with custom values."""
-        config = RealNVPConfig(
-            n_scaled_layers=3,
-            n_unscaled_layers=5,
-            learning_rate=1e-4,
-            momentum=0.95,
-            standardize=True,
-            temperature=0.9,
-        )
-
-        assert config.n_scaled_layers == 3
-        assert config.n_unscaled_layers == 5
-        assert config.learning_rate == 1e-4
-        assert config.momentum == 0.95
-        assert config.standardize is True
-        assert config.temperature == 0.9
-
-    def test_train_config_custom_values(self) -> None:
-        """Test creating TrainConfig with custom values."""
-        config = TrainConfig(batch_size=128, epochs=50, verbose=False)
-
-        assert config.batch_size == 128
-        assert config.epochs == 50
-        assert config.verbose is False
+def test_RealNVPConfig_model_cls() -> None:
+    """Test that RealNVPConfig returns the correct model class."""
+    config = RealNVPConfig()
+    assert config.model_cls() == RealNVPModel
 
 
-class TestKDEModel:
-    """Tests for the KDEModel class."""
+def test_RQSplineConfig_model_cls() -> None:
+    """Test that RQSplineConfig returns the correct model class."""
+    config = RQSplineConfig()
+    assert config.model_cls() == RQSplineModel
 
-    @pytest.fixture
-    def kde(self, rng) -> KDEModel:
-        """Sample data for testing."""
-        return KDEModel(rng.standard_normal((200, 1)))
 
-    def test_kde_model_initialization(self, kde) -> None:
-        """Test that KDEModel initializes without error."""
+def test_FlowConfig_cannot_initialise_temperature() -> None:
+    """Test that temperature cannot be set in FlowConfig."""
+    with pytest.raises(TypeError):
+        FlowConfig(temperature=0.5)
 
-        assert kde is not None
-        assert hasattr(kde, "predict")
 
-    def test_kde_model_predict(self, kde) -> None:
-        """Test that KDEModel predict method returns log densities."""
+def test_FlowConfig_temperature_is_fixed() -> None:
+    """Test that temperature is fixed to 1.0 in FlowConfig."""
+    config = FlowConfig()
+    assert config.temperature == 1.0
 
-        test_points = np.array([[0.0], [1.0], [-1.0]])
-        log_densities = kde.predict(test_points)
 
-        assert log_densities.shape == (3,)
-        assert np.all(np.isfinite(log_densities))
+@pytest.mark.parametrize(
+    "config_class", [RealNVPConfig, RQSplineConfig, FlowConfig, TrainConfig]
+)
+def test_config_classes_are_frozen(config_class) -> None:
+    """Test that config dataclasses are frozen."""
+    config = config_class()
+    field_names = [field.name for field in fields(config_class)]
+    for field_name in field_names:
+        with pytest.raises(FrozenInstanceError):
+            setattr(config, field_name, 123)
+
+
+def test_FlowConfig_consistency_matching() -> None:
+    """Test that FlowConfig accepts matching flow_type and model_config."""
+    # These should not raise errors
+    FlowConfig(flow_type="RealNVP", model_config=RealNVPConfig())
+    FlowConfig(flow_type="RQSpline", model_config=RQSplineConfig())
+
+
+def test_FlowConfig_consistency_mismatched() -> None:
+    """Test that FlowConfig raises ValueError when flow_type and model_config are inconsistent."""
+    with pytest.raises(
+        ValueError, match="flow_type 'RealNVP' is inconsistent with model_config type"
+    ):
+        FlowConfig(flow_type="RealNVP", model_config=RQSplineConfig())
+
+    with pytest.raises(
+        ValueError, match="flow_type 'RQSpline' is inconsistent with model_config type"
+    ):
+        FlowConfig(flow_type="RQSpline", model_config=RealNVPConfig())
