@@ -68,6 +68,12 @@ class RQSplineConfig(ModelConfig):
         return RQSplineModel
 
 
+default_model_configs = {
+    "RealNVP": RealNVPConfig(),
+    "RQSpline": RQSplineConfig(),
+}
+
+
 class FlowConfig(BaseModel):
     """Configuration of the flow model.
 
@@ -105,12 +111,6 @@ class FlowConfig(BaseModel):
             )
             raise ValueError(msg)
         return self
-
-
-default_model_configs = {
-    "RealNVP": RealNVPConfig(),
-    "RQSpline": RQSplineConfig(),
-}
 
 
 def fit_marginalised_posterior(
