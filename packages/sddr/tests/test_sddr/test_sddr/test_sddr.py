@@ -197,3 +197,23 @@ def test_config_classes_are_frozen(config_class) -> None:
     for field_name in field_names:
         with pytest.raises(FrozenInstanceError):
             setattr(config, field_name, 123)
+
+
+def test_FlowConfig_consistency_matching() -> None:
+    """Test that FlowConfig accepts matching flow_type and model_config."""
+    # These should not raise errors
+    FlowConfig(flow_type="RealNVP", model_config=RealNVPConfig())
+    FlowConfig(flow_type="RQSpline", model_config=RQSplineConfig())
+
+
+def test_FlowConfig_consistency_mismatched() -> None:
+    """Test that FlowConfig raises ValueError when flow_type and model_config are inconsistent."""
+    with pytest.raises(
+        ValueError, match="flow_type 'RealNVP' is inconsistent with model_config type"
+    ):
+        FlowConfig(flow_type="RealNVP", model_config=RQSplineConfig())
+
+    with pytest.raises(
+        ValueError, match="flow_type 'RQSpline' is inconsistent with model_config type"
+    ):
+        FlowConfig(flow_type="RQSpline", model_config=RealNVPConfig())
