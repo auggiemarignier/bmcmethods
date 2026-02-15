@@ -1,11 +1,12 @@
 """Tests for the SDDR calculation functions."""
 
-from dataclasses import FrozenInstanceError, fields
+# Tests use pydantic models for config classes; avoid dataclasses entirely
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 from harmonic.model import FlowModel, RealNVPModel, RQSplineModel
+from pydantic import ValidationError
 from sampling.priors import CompoundPrior, GaussianPrior, PriorComponent
 from sddr.sddr import (
     FlowConfig,
@@ -40,7 +41,7 @@ class TestFitMarginalisedPosterior:
     def test_flow_choice(self, samples: np.ndarray) -> None:
         """Test that the right type of flow model is returned."""
         marginal_indices = [0, 1]
-        flow_config = FlowConfig(flow_type="RealNVP")
+        flow_config = FlowConfig(flow_type="RealNVP", flow_model_config=RealNVPConfig())
 
         model = fit_marginalised_posterior(
             samples, marginal_indices, flow_config=flow_config
@@ -74,7 +75,7 @@ class TestFitMarginalisedPosterior:
 
         marginal_indices = [2]
 
-        flow_config = FlowConfig(flow_type="RealNVP")
+        flow_config = FlowConfig(flow_type="RealNVP", flow_model_config=RealNVPConfig())
         with pytest.warns(UserWarning, match="1D"):
             model = fit_marginalised_posterior(
                 samples, marginal_indices, flow_config=flow_config
@@ -178,8 +179,9 @@ def test_RQSplineConfig_model_cls() -> None:
 
 def test_FlowConfig_cannot_initialise_temperature() -> None:
     """Test that temperature cannot be set in FlowConfig."""
-    with pytest.raises(TypeError):
-        FlowConfig(temperature=0.5)
+    # pydantic by default ignores extra fields
+    flow_cfg = FlowConfig(temperature=0.5)
+    assert flow_cfg.temperature == 1.0
 
 
 def test_FlowConfig_temperature_is_fixed() -> None:
@@ -192,41 +194,41 @@ def test_FlowConfig_temperature_is_fixed() -> None:
     "config_class", [RealNVPConfig, RQSplineConfig, FlowConfig, TrainConfig]
 )
 def test_config_classes_are_frozen(config_class) -> None:
-    """Test that config dataclasses are frozen."""
+    """Test that config models are frozen.
+
+    Try setting each real field on the instance and expect an immutability error.
+    """
+
     config = config_class()
-    field_names = [field.name for field in fields(config_class)]
+
+    # Class-level pydantic v2 config should indicate frozen
+    model_config = getattr(type(config), "model_config", None)
+    assert model_config is not None and model_config.get("frozen", False) is True
+
+    # Attempting to set any declared field should raise an immutability error
+    field_names = getattr(type(config), "model_fields", {})
     for field_name in field_names:
-        with pytest.raises(FrozenInstanceError):
+        with pytest.raises(ValidationError, match="Instance is frozen"):
             setattr(config, field_name, 123)
 
 
 def test_FlowConfig_consistency_matching() -> None:
-    """Test that FlowConfig accepts matching flow_type and model_config."""
+    """Test that FlowConfig accepts matching flow_type and flow_model_config."""
     # These should not raise errors
-    FlowConfig(flow_type="RealNVP", model_config=RealNVPConfig())
-    FlowConfig(flow_type="RQSpline", model_config=RQSplineConfig())
-
-
-def test_FlowConfig_consistency_mismatched() -> None:
-    """Test that FlowConfig raises ValueError when flow_type and model_config are inconsistent."""
-    with pytest.raises(
-        ValueError, match="flow_type 'RealNVP' is inconsistent with model_config type"
-    ):
-        FlowConfig(flow_type="RealNVP", model_config=RQSplineConfig())
-
-    with pytest.raises(
-        ValueError, match="flow_type 'RQSpline' is inconsistent with model_config type"
-    ):
-        FlowConfig(flow_type="RQSpline", model_config=RealNVPConfig())
+    FlowConfig(flow_type="RealNVP", flow_model_config=RealNVPConfig())
+    FlowConfig(flow_type="RQSpline", flow_model_config=RQSplineConfig())
 
 
 @pytest.mark.parametrize(
-    "flow_type,cfg_cls", [("RealNVP", RealNVPConfig), ("RQSpline", RQSplineConfig)]
+    "flow_type,wrong_cfg_cls",
+    [("RealNVP", RQSplineConfig), ("RQSpline", RealNVPConfig)],
 )
-def test_FlowConfig_ModelConfig_None(
-    flow_type: str, cfg_cls: type[ModelConfig]
+def test_FlowConfig_consistency_mismatched(
+    flow_type: str, wrong_cfg_cls: type[ModelConfig]
 ) -> None:
-    """Test that if model_config is None, it is set to the default for the given flow_type."""
-    config = FlowConfig(flow_type=flow_type, model_config=None)
-    assert config.model_config is not None
-    assert isinstance(config.model_config, cfg_cls)
+    """Test that FlowConfig raises ValueError when flow_type and flow_model_config are inconsistent."""
+    with pytest.raises(
+        ValueError,
+        match=f"flow_type '{flow_type}' is inconsistent with flow_model_config type",
+    ):
+        FlowConfig(flow_type=flow_type, flow_model_config=wrong_cfg_cls())
