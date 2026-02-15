@@ -2,12 +2,12 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Literal
 from warnings import warn
 
 import harmonic as hm
 import numpy as np
-from harmonic.model import RealNVPModel, RQSplineModel
+from harmonic.model import FlowModel, RealNVPModel, RQSplineModel
 from pydantic import BaseModel, ConfigDict, computed_field
 from sampling.priors import CompoundPrior
 
@@ -33,7 +33,7 @@ class ModelConfig(ABC, BaseModel):
     model_config = ConfigDict(frozen=True)
 
     @abstractmethod
-    def model_cls(self) -> Any:
+    def model_cls(self) -> type[FlowModel]:
         """Return the corresponding model class for this config."""
         ...
 
@@ -47,7 +47,7 @@ class RealNVPConfig(ModelConfig):
     n_scaled_layers: int = 2
     n_unscaled_layers: int = 4
 
-    def model_cls(self) -> Any:
+    def model_cls(self) -> type[RealNVPModel]:
         """Return the RealNVPModel class."""
         return RealNVPModel
 
@@ -63,7 +63,7 @@ class RQSplineConfig(ModelConfig):
     hidden_size: Sequence[int] = (64, 64)
     spline_range: Sequence[float] = (-10.0, 10.0)
 
-    def model_cls(self) -> Any:
+    def model_cls(self) -> type[RQSplineModel]:
         """Return the RQSplineModel class."""
         return RQSplineModel
 
