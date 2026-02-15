@@ -194,7 +194,7 @@ def test_FlowConfig_temperature_is_fixed() -> None:
     "config_class", [RealNVPConfig, RQSplineConfig, FlowConfig, TrainConfig]
 )
 def test_config_classes_are_frozen(config_class) -> None:
-    """Test that config models are frozen=.
+    """Test that config models are frozen.
 
     Try setting each real field on the instance and expect an immutability error.
     """
