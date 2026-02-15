@@ -41,7 +41,7 @@ class TestFitMarginalisedPosterior:
     def test_flow_choice(self, samples: np.ndarray) -> None:
         """Test that the right type of flow model is returned."""
         marginal_indices = [0, 1]
-        flow_config = FlowConfig(flow_type="RealNVP")
+        flow_config = FlowConfig(flow_type="RealNVP", flow_model_config=RealNVPConfig())
 
         model = fit_marginalised_posterior(
             samples, marginal_indices, flow_config=flow_config
@@ -75,7 +75,7 @@ class TestFitMarginalisedPosterior:
 
         marginal_indices = [2]
 
-        flow_config = FlowConfig(flow_type="RealNVP")
+        flow_config = FlowConfig(flow_type="RealNVP", flow_model_config=RealNVPConfig())
         with pytest.warns(UserWarning, match="1D"):
             model = fit_marginalised_posterior(
                 samples, marginal_indices, flow_config=flow_config
@@ -232,15 +232,3 @@ def test_FlowConfig_consistency_mismatched(
         match=f"flow_type '{flow_type}' is inconsistent with flow_model_config type",
     ):
         FlowConfig(flow_type=flow_type, flow_model_config=wrong_cfg_cls())
-
-
-@pytest.mark.parametrize(
-    "flow_type,cfg_cls", [("RealNVP", RealNVPConfig), ("RQSpline", RQSplineConfig)]
-)
-def test_FlowConfig_ModelConfig_None(
-    flow_type: str, cfg_cls: type[ModelConfig]
-) -> None:
-    """Test that if flow_model_config is None, it is set to the default for the given flow_type."""
-    config = FlowConfig(flow_type=flow_type, flow_model_config=None)
-    assert config.flow_model_config is not None
-    assert isinstance(config.flow_model_config, cfg_cls)

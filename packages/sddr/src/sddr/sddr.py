@@ -2,13 +2,13 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Literal
+from typing import Literal, Self
 from warnings import warn
 
 import harmonic as hm
 import numpy as np
 from harmonic.model import FlowModel, RealNVPModel, RQSplineModel
-from pydantic import BaseModel, ConfigDict, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 from sampling.priors import CompoundPrior
 
 from .marginalisation import marginalise_samples
@@ -75,7 +75,9 @@ class FlowConfig(BaseModel):
     """
 
     flow_type: Literal["RealNVP", "RQSpline"] = "RQSpline"
-    flow_model_config: ModelConfig | None = None
+    flow_model_config: ModelConfig = Field(
+        default_factory=lambda: default_model_configs["RQSpline"]
+    )
     standardize: bool = False
     learning_rate: float = 1e-3
     momentum: float = 0.9
@@ -90,28 +92,19 @@ class FlowConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    def model_post_init(self, __context: dict) -> None:
+    @model_validator(mode="after")
+    def consistent_flow_type_and_model_config(self) -> Self:
         """Validate that flow_type and flow_model_config are consistent."""
-        # Always validate flow_type is valid
-        if self.flow_type not in default_model_configs:
-            msg = f"Invalid flow_type '{self.flow_type}'. Must be one of {list(default_model_configs.keys())}."
-            raise ValueError(msg)
 
-        # If model_config is provided, ensure it matches flow_type
-        if self.flow_model_config is not None:
-            expected_config_type = type(default_model_configs[self.flow_type])
-            actual_config_type = type(self.flow_model_config)
-            if actual_config_type != expected_config_type:
-                msg = (
-                    f"flow_type '{self.flow_type}' is inconsistent with flow_model_config type "
-                    f"{actual_config_type.__name__}. Expected {expected_config_type.__name__}."
-                )
-                raise ValueError(msg)
-        else:
-            # If flow_model_config is None, set it to the default for the given flow_type
-            object.__setattr__(
-                self, "flow_model_config", default_model_configs[self.flow_type]
+        expected_config_type = type(default_model_configs[self.flow_type])
+        actual_config_type = type(self.flow_model_config)
+        if actual_config_type != expected_config_type:
+            msg = (
+                f"flow_type '{self.flow_type}' is inconsistent with flow_model_config type "
+                f"{actual_config_type.__name__}. Expected {expected_config_type.__name__}."
             )
+            raise ValueError(msg)
+        return self
 
 
 default_model_configs = {
