@@ -2,20 +2,19 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Literal
 from warnings import warn
 
 import harmonic as hm
 import numpy as np
 from harmonic.model import RealNVPModel, RQSplineModel
+from pydantic import BaseModel, ConfigDict, computed_field
 from sampling.priors import CompoundPrior
 
 from .marginalisation import marginalise_samples
 
 
-@dataclass(frozen=True)
-class TrainConfig:
+class TrainConfig(BaseModel):
     """Configuration for training the flow model.
 
     Parameters to be passed to hm.model.FlowModel.fit().
@@ -25,10 +24,13 @@ class TrainConfig:
     epochs: int = 10
     verbose: bool = True
 
+    model_config = ConfigDict(frozen=True)
 
-@dataclass(frozen=True)
-class ModelConfig(ABC):
+
+class ModelConfig(ABC, BaseModel):
     """Base for model-specific configs exposing the model class."""
+
+    model_config = ConfigDict(frozen=True)
 
     @abstractmethod
     def model_cls(self) -> Any:
@@ -36,7 +38,6 @@ class ModelConfig(ABC):
         ...
 
 
-@dataclass(frozen=True)
 class RealNVPConfig(ModelConfig):
     """Configuration of the RealNVP model.
 
@@ -51,7 +52,6 @@ class RealNVPConfig(ModelConfig):
         return RealNVPModel
 
 
-@dataclass(frozen=True)
 class RQSplineConfig(ModelConfig):
     """Configuration of the RQSpline model.
 
@@ -68,23 +68,29 @@ class RQSplineConfig(ModelConfig):
         return RQSplineModel
 
 
-@dataclass(frozen=True)
-class FlowConfig:
+class FlowConfig(BaseModel):
     """Configuration of the flow model.
 
     Just the list of parameters taken by hm.model.FlowModel, plus a choice of flow type (RealNVP or RQSpline).
-
-    `temperature` is different to the default in `harmonic` because for SDDR we don't want tempering.
     """
 
     flow_type: Literal["RealNVP", "RQSpline"] = "RQSpline"
-    model_config: ModelConfig | None = None
+    model_cfg: ModelConfig | None = None
     standardize: bool = False
     learning_rate: float = 1e-3
     momentum: float = 0.9
-    temperature: float = field(default=1.0, init=False)  # No tempering for SDDR
 
-    def __post_init__(self) -> None:
+    @computed_field
+    def temperature(self) -> float:
+        """Read-only temperature included in model dumps (not settable by user).
+
+        `temperature` is different to the default in `harmonic` because for SDDR we don't want tempering.
+        """
+        return 1.0
+
+    model_config = ConfigDict(frozen=True)
+
+    def model_post_init(self, __context: dict) -> None:
         """Validate that flow_type and model_config are consistent."""
         # Always validate flow_type is valid
         if self.flow_type not in default_model_configs:
@@ -92,20 +98,18 @@ class FlowConfig:
             raise ValueError(msg)
 
         # If model_config is provided, ensure it matches flow_type
-        if self.model_config is not None:
+        if self.model_cfg is not None:
             expected_config_type = type(default_model_configs[self.flow_type])
-            actual_config_type = type(self.model_config)
+            actual_config_type = type(self.model_cfg)
             if actual_config_type != expected_config_type:
                 msg = (
-                    f"flow_type '{self.flow_type}' is inconsistent with model_config type "
+                    f"flow_type '{self.flow_type}' is inconsistent with model_cfg type "
                     f"{actual_config_type.__name__}. Expected {expected_config_type.__name__}."
                 )
                 raise ValueError(msg)
         else:
-            # If model_config is None, set it to the default for the given flow_type
-            object.__setattr__(
-                self, "model_config", default_model_configs[self.flow_type]
-            )
+            # If model_cfg is None, set it to the default for the given flow_type
+            object.__setattr__(self, "model_cfg", default_model_configs[self.flow_type])
 
 
 default_model_configs = {
@@ -146,10 +150,11 @@ def fit_marginalised_posterior(
             "Using RealNVP with a 1D marginal is not supported. Falling back to a default RQSpline model.",
             stacklevel=2,
         )
-        flow_config = replace(
-            flow_config,
-            flow_type="RQSpline",
-            model_config=default_model_configs["RQSpline"],
+        flow_config = flow_config.model_copy(
+            update={
+                "flow_type": "RQSpline",
+                "model_cfg": default_model_configs["RQSpline"],
+            }
         )
 
     marginalised_samples = marginalise_samples(samples, marginal_indices)
@@ -157,12 +162,11 @@ def fit_marginalised_posterior(
     if train_config is None:
         train_config = TrainConfig()
 
-    model_cls = flow_config.model_config.model_cls()
-    flow_cfg = asdict(flow_config)
-    model_cfg = flow_cfg.pop("model_config")
-    _ = flow_cfg.pop("flow_type")
-    model = model_cls(ndim_in=len(marginal_indices), **model_cfg, **flow_cfg)
-    model.fit(X=marginalised_samples, **asdict(train_config))
+    model_cls = flow_config.model_cfg.model_cls()
+    flow_kwargs = flow_config.model_dump(exclude={"model_cfg", "flow_type"})
+    model_kwargs = flow_config.model_cfg.model_dump()
+    model = model_cls(ndim_in=len(marginal_indices), **model_kwargs, **flow_kwargs)
+    model.fit(X=marginalised_samples, **train_config.model_dump())
     return model
 
 
