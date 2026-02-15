@@ -75,7 +75,7 @@ class FlowConfig(BaseModel):
     """
 
     flow_type: Literal["RealNVP", "RQSpline"] = "RQSpline"
-    model_cfg: ModelConfig | None = None
+    flow_model_config: ModelConfig | None = None
     standardize: bool = False
     learning_rate: float = 1e-3
     momentum: float = 0.9
@@ -91,25 +91,27 @@ class FlowConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     def model_post_init(self, __context: dict) -> None:
-        """Validate that flow_type and model_cfg are consistent."""
+        """Validate that flow_type and flow_model_config are consistent."""
         # Always validate flow_type is valid
         if self.flow_type not in default_model_configs:
             msg = f"Invalid flow_type '{self.flow_type}'. Must be one of {list(default_model_configs.keys())}."
             raise ValueError(msg)
 
         # If model_config is provided, ensure it matches flow_type
-        if self.model_cfg is not None:
+        if self.flow_model_config is not None:
             expected_config_type = type(default_model_configs[self.flow_type])
-            actual_config_type = type(self.model_cfg)
+            actual_config_type = type(self.flow_model_config)
             if actual_config_type != expected_config_type:
                 msg = (
-                    f"flow_type '{self.flow_type}' is inconsistent with model_cfg type "
+                    f"flow_type '{self.flow_type}' is inconsistent with flow_model_config type "
                     f"{actual_config_type.__name__}. Expected {expected_config_type.__name__}."
                 )
                 raise ValueError(msg)
         else:
-            # If model_cfg is None, set it to the default for the given flow_type
-            object.__setattr__(self, "model_cfg", default_model_configs[self.flow_type])
+            # If flow_model_config is None, set it to the default for the given flow_type
+            object.__setattr__(
+                self, "flow_model_config", default_model_configs[self.flow_type]
+            )
 
 
 default_model_configs = {
@@ -153,7 +155,7 @@ def fit_marginalised_posterior(
         flow_config = flow_config.model_copy(
             update={
                 "flow_type": "RQSpline",
-                "model_cfg": default_model_configs["RQSpline"],
+                "flow_model_config": default_model_configs["RQSpline"],
             }
         )
 
@@ -162,9 +164,9 @@ def fit_marginalised_posterior(
     if train_config is None:
         train_config = TrainConfig()
 
-    model_cls = flow_config.model_cfg.model_cls()
-    flow_kwargs = flow_config.model_dump(exclude={"model_cfg", "flow_type"})
-    model_kwargs = flow_config.model_cfg.model_dump()
+    model_cls = flow_config.flow_model_config.model_cls()
+    flow_kwargs = flow_config.model_dump(exclude={"flow_model_config", "flow_type"})
+    model_kwargs = flow_config.flow_model_config.model_dump()
     model = model_cls(ndim_in=len(marginal_indices), **model_kwargs, **flow_kwargs)
     model.fit(X=marginalised_samples, **train_config.model_dump())
     return model

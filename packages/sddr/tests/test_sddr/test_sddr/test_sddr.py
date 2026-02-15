@@ -213,10 +213,10 @@ def test_config_classes_are_frozen(config_class) -> None:
 
 
 def test_FlowConfig_consistency_matching() -> None:
-    """Test that FlowConfig accepts matching flow_type and model_cfg."""
+    """Test that FlowConfig accepts matching flow_type and flow_model_config."""
     # These should not raise errors
-    FlowConfig(flow_type="RealNVP", model_cfg=RealNVPConfig())
-    FlowConfig(flow_type="RQSpline", model_cfg=RQSplineConfig())
+    FlowConfig(flow_type="RealNVP", flow_model_config=RealNVPConfig())
+    FlowConfig(flow_type="RQSpline", flow_model_config=RQSplineConfig())
 
 
 @pytest.mark.parametrize(
@@ -226,11 +226,12 @@ def test_FlowConfig_consistency_matching() -> None:
 def test_FlowConfig_consistency_mismatched(
     flow_type: str, wrong_cfg_cls: type[ModelConfig]
 ) -> None:
-    """Test that FlowConfig raises ValueError when flow_type and model_cfg are inconsistent."""
+    """Test that FlowConfig raises ValueError when flow_type and flow_model_config are inconsistent."""
     with pytest.raises(
-        ValueError, match=f"flow_type '{flow_type}' is inconsistent with model_cfg type"
+        ValueError,
+        match=f"flow_type '{flow_type}' is inconsistent with flow_model_config type",
     ):
-        FlowConfig(flow_type=flow_type, model_cfg=wrong_cfg_cls())
+        FlowConfig(flow_type=flow_type, flow_model_config=wrong_cfg_cls())
 
 
 @pytest.mark.parametrize(
@@ -239,7 +240,7 @@ def test_FlowConfig_consistency_mismatched(
 def test_FlowConfig_ModelConfig_None(
     flow_type: str, cfg_cls: type[ModelConfig]
 ) -> None:
-    """Test that if model_cfg is None, it is set to the default for the given flow_type."""
-    config = FlowConfig(flow_type=flow_type, model_cfg=None)
-    assert config.model_cfg is not None
-    assert isinstance(config.model_cfg, cfg_cls)
+    """Test that if flow_model_config is None, it is set to the default for the given flow_type."""
+    config = FlowConfig(flow_type=flow_type, flow_model_config=None)
+    assert config.flow_model_config is not None
+    assert isinstance(config.flow_model_config, cfg_cls)
