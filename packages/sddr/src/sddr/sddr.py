@@ -141,12 +141,6 @@ def fit_marginalised_posterior(
     if flow_config is None:
         flow_config = FlowConfig()
 
-    # default model_config from flow_type if not provided
-    if flow_config.model_config is None:
-        flow_config = replace(
-            flow_config, model_config=default_model_configs[flow_config.flow_type]
-        )
-
     if len(marginal_indices) == 1 and flow_config.flow_type == "RealNVP":
         warn(
             "Using RealNVP with a 1D marginal is not supported. Falling back to a default RQSpline model.",
