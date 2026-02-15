@@ -9,6 +9,7 @@ from harmonic.model import FlowModel, RealNVPModel, RQSplineModel
 from sampling.priors import CompoundPrior, GaussianPrior, PriorComponent
 from sddr.sddr import (
     FlowConfig,
+    ModelConfig,
     RealNVPConfig,
     RQSplineConfig,
     TrainConfig,
@@ -217,3 +218,15 @@ def test_FlowConfig_consistency_mismatched() -> None:
         ValueError, match="flow_type 'RQSpline' is inconsistent with model_config type"
     ):
         FlowConfig(flow_type="RQSpline", model_config=RealNVPConfig())
+
+
+@pytest.mark.parametrize(
+    "flow_type,cfg_cls", [("RealNVP", RealNVPConfig), ("RQSpline", RQSplineConfig)]
+)
+def test_FlowConfig_ModelConfig_None(
+    flow_type: str, cfg_cls: type[ModelConfig]
+) -> None:
+    """Test that if model_config is None, it is set to the default for the given flow_type."""
+    config = FlowConfig(flow_type=flow_type, model_config=None)
+    assert config.model_config is not None
+    assert isinstance(config.model_config, cfg_cls)
