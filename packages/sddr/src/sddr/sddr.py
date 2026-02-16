@@ -81,7 +81,7 @@ class FlowConfig(BaseModel):
     """
 
     flow_type: Literal["RealNVP", "RQSpline"] = "RQSpline"
-    flow_model_config: ModelConfig = Field(
+    flow_model_config: RQSplineConfig | RealNVPConfig = Field(
         default_factory=lambda: default_model_configs["RQSpline"]
     )
     standardize: bool = False
