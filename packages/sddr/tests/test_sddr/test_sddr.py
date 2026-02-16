@@ -232,3 +232,88 @@ def test_FlowConfig_consistency_mismatched(
         match=f"flow_type '{flow_type}' is inconsistent with flow_model_config type",
     ):
         FlowConfig(flow_type=flow_type, flow_model_config=wrong_cfg_cls())
+
+
+def test_FlowConfig_from_dict_realnvp() -> None:
+    """Test that FlowConfig can be created from a dictionary."""
+    config_dict = {
+        "flow_type": "RealNVP",
+        "flow_model_config": {"n_scaled_layers": 4},
+        "standardize": True,
+        "learning_rate": 0.01,
+        "momentum": 0.95,
+    }
+    config = FlowConfig(**config_dict)
+
+    assert config.flow_type == "RealNVP"
+    assert isinstance(config.flow_model_config, RealNVPConfig)
+    assert config.flow_model_config.n_scaled_layers == 4
+    assert config.flow_model_config.n_unscaled_layers == 4  # default value
+    assert config.standardize is True
+    assert config.learning_rate == 0.01
+    assert config.momentum == 0.95
+
+
+def test_FlowConfig_from_dict_rqspline() -> None:
+    """Test that FlowConfig can be created from a dictionary with RQSpline config."""
+    config_dict = {
+        "flow_type": "RQSpline",
+        "flow_model_config": {"n_layers": 6, "n_bins": 10},
+        "standardize": False,
+        "learning_rate": 0.001,
+        "momentum": 0.9,
+    }
+    config = FlowConfig(**config_dict)
+
+    assert config.flow_type == "RQSpline"
+    assert isinstance(config.flow_model_config, RQSplineConfig)
+    assert config.flow_model_config.n_layers == 6
+    assert config.flow_model_config.n_bins == 10
+    assert config.flow_model_config.hidden_size == (64, 64)  # default value
+    assert config.flow_model_config.spline_range == (-10.0, 10.0)  # default value
+    assert config.standardize is False
+    assert config.learning_rate == 0.001
+    assert config.momentum == 0.9
+
+
+def test_FlowConfig_to_dict_realnvp() -> None:
+    """Test that FlowConfig can be converted to a dictionary."""
+    config = FlowConfig(
+        flow_type="RealNVP",
+        flow_model_config=RealNVPConfig(n_scaled_layers=3, n_unscaled_layers=5),
+        standardize=True,
+        learning_rate=0.01,
+        momentum=0.95,
+    )
+    config_dict = config.model_dump()
+
+    assert config_dict["flow_type"] == "RealNVP"
+    assert config_dict["flow_model_config"]["n_scaled_layers"] == 3
+    assert config_dict["flow_model_config"]["n_unscaled_layers"] == 5
+    assert config_dict["standardize"] is True
+    assert config_dict["learning_rate"] == 0.01
+    assert config_dict["momentum"] == 0.95
+
+
+def test_FlowConfig_to_dict_rqspline() -> None:
+    """Test that FlowConfig can be converted to a dictionary with RQSpline config."""
+    config = FlowConfig(
+        flow_type="RQSpline",
+        flow_model_config=RQSplineConfig(n_layers=6, n_bins=10),
+        standardize=False,
+        learning_rate=0.001,
+        momentum=0.9,
+    )
+    config_dict = config.model_dump()
+
+    assert config_dict["flow_type"] == "RQSpline"
+    assert config_dict["flow_model_config"]["n_layers"] == 6
+    assert config_dict["flow_model_config"]["n_bins"] == 10
+    assert config_dict["flow_model_config"]["hidden_size"] == (64, 64)  # default value
+    assert config_dict["flow_model_config"]["spline_range"] == (
+        -10.0,
+        10.0,
+    )  # default value
+    assert config_dict["standardize"] is False
+    assert config_dict["learning_rate"] == 0.001
+    assert config_dict["momentum"] == 0.9
