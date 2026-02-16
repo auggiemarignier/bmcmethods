@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from sampling.priors import CompoundPrior, GaussianPrior, PriorComponent
 from sddr.sddr import (
     FlowConfig,
-    ModelConfig,
+    FlowModelConfig,
     RealNVPConfig,
     RQSplineConfig,
     TrainConfig,
@@ -224,7 +224,7 @@ def test_FlowConfig_consistency_matching() -> None:
     [("RealNVP", RQSplineConfig), ("RQSpline", RealNVPConfig)],
 )
 def test_FlowConfig_consistency_mismatched(
-    flow_type: str, wrong_cfg_cls: type[ModelConfig]
+    flow_type: str, wrong_cfg_cls: type[FlowModelConfig]
 ) -> None:
     """Test that FlowConfig raises ValueError when flow_type and flow_model_config are inconsistent."""
     with pytest.raises(

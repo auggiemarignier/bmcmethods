@@ -27,7 +27,7 @@ class TrainConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
-class ModelConfig(ABC, BaseModel):
+class FlowModelConfig(ABC, BaseModel):
     """Base for model-specific configs exposing the model class."""
 
     model_config = ConfigDict(frozen=True)
@@ -38,7 +38,7 @@ class ModelConfig(ABC, BaseModel):
         ...
 
 
-class RealNVPConfig(ModelConfig):
+class RealNVPConfig(FlowModelConfig):
     """Configuration of the RealNVP model.
 
     Just the list of parameters taken by hm.model.RealNVPModel.
@@ -52,7 +52,7 @@ class RealNVPConfig(ModelConfig):
         return RealNVPModel
 
 
-class RQSplineConfig(ModelConfig):
+class RQSplineConfig(FlowModelConfig):
     """Configuration of the RQSpline model.
 
     Just the list of parameters taken by hm.model.RQSplineModel.
