@@ -18,6 +18,8 @@ class PriorComponent:
 
     Parameters
     ----------
+    type : PriorType
+        Type of prior (GAUSSIAN, UNIFORM, or WRAPPED_UNIFORM).
     prior_fn : PriorFunction
         Prior function that takes model parameters and returns the log-prior.
     indices : Sequence[int] | slice | np.ndarray
