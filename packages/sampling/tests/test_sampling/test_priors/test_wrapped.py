@@ -60,20 +60,28 @@ def wrapped_prior(request) -> WrappedPrior:
     return WrappedPrior(wrap_bounds=[(-180.0, 180.0)], type=prior_type, **kwargs)
 
 
-def test_model_parameter_wrapping(wrapped_prior: WrappedPrior) -> None:
-    """Test that model parameters are correctly wrapped around the specified bounds."""
-
-    model_params_and_wrapped = [
+@pytest.mark.parametrize(
+    "model_param,expected_wrapped",
+    [
         (-181.0, 179.0),  # Just below lower bound should wrap to just below upper bound
         (180.0, -180.0),  # Just above upper bound should wrap to just above lower bound
-    ]
-    for model_param, expected_wrapped in model_params_and_wrapped:
-        model_params = np.array([model_param])
-        wrapped_model_params = wrapped_prior._wrap(model_params)
-        expected_wrapped_model_params = np.array([expected_wrapped])
+        (360.0, 0.0),  # Exactly one full range above should wrap to the same point
+        (-360.0, 0.0),  # Exactly one full range below should wrap to the same point
+        (540.0, -180.0),  # One and a half ranges above should wrap to lower bound
+        (0.0, 0.0),  # Within bounds should not change
+    ],
+)
+def test_model_parameter_wrapping(
+    wrapped_prior: WrappedPrior, model_param: float, expected_wrapped: float
+) -> None:
+    """Test that model parameters are correctly wrapped around the specified bounds."""
 
-        np.testing.assert_allclose(wrapped_model_params, expected_wrapped_model_params)
-        assert wrapped_model_params.shape == model_params.shape
+    model_params = np.array([model_param])
+    wrapped_model_params = wrapped_prior._wrap(model_params)
+    expected_wrapped_model_params = np.array([expected_wrapped])
+
+    np.testing.assert_allclose(wrapped_model_params, expected_wrapped_model_params)
+    assert wrapped_model_params.shape == model_params.shape
 
 
 def test_call(wrapped_prior: WrappedPrior) -> None:
