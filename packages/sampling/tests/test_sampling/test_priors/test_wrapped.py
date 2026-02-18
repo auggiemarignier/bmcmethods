@@ -157,3 +157,13 @@ def test_call(wrapped_prior: WrappedPrior) -> None:
     )  # Calculate expected log-prior using the base prior with wrapped parameters
 
     np.testing.assert_allclose(log_prior, expected_log_prior)
+
+
+def test_sample(wrapped_prior: WrappedPrior) -> None:
+    """Test that we can sample from the WrappedPrior."""
+
+    rng = np.random.default_rng(seed=42)
+    num_samples = 1000
+    samples = wrapped_prior.sample(num_samples=num_samples, rng=rng)
+
+    assert samples.shape == (num_samples, len(wrapped_prior.wrap_bounds))

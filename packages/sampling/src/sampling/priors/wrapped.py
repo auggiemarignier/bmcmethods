@@ -80,3 +80,22 @@ class WrappedPrior:
             Returns scalar (0D array) for 1D input, array for 2D input.
         """
         return self._base(self._wrap(model_params))
+
+    def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
+        """Sample from the wrapped prior.
+
+        In practice this just samples from the base prior.
+
+        Parameters
+        ----------
+        num_samples : int
+            Number of samples to draw.
+        rng : np.random.Generator
+            Random number generator.
+
+        Returns
+        -------
+        samples : ndarray, shape (num_samples, n)
+            Samples drawn from the wrapped prior.
+        """
+        return self._base.sample(num_samples, rng)
