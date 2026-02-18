@@ -1,50 +1,35 @@
-"""Wrapping priors around specified bounds."""
-
-from typing import Any
+"""Wrapping uniform priors around its bounds."""
 
 import numpy as np
 
-from sampling.priors import PriorFunction
-from sampling.priors._protocols import PriorType
-from sampling.priors.gaussian import GaussianPrior
 from sampling.priors.uniform import UniformPrior
 
-_AVAILABLE_PRIORS: dict[PriorType, type[PriorFunction]] = {
-    PriorType.GAUSSIAN: GaussianPrior,
-    PriorType.UNIFORM: UniformPrior,
-}
 
-
-class WrappedPrior:
-    """A prior that wraps parameters around specified bounds."""
+class WrappedUniformPrior(UniformPrior):
+    """A uniform prior that wraps parameters around its bounds."""
 
     def __init__(
         self,
-        wrap_bounds: list[tuple[float, float]],
-        type: str | PriorType,
-        **kwargs: Any,
+        lower_bounds: np.ndarray,
+        upper_bounds: np.ndarray,
     ) -> None:
         """
-        Initialize the WrappedPrior.
+        Initialize the WrappedUniformPrior.
 
         Parameters
         ----------
-        wrap_bounds : list of tuples
-            List of (lower_bound, upper_bound) for each parameter to be wrapped.
-        type : str or PriorType
-            The type of prior to be wrapped.
+        lower_bounds : numpy array
+            Lower bounds for each parameter to be wrapped.
+        upper_bounds : numpy array
+            Upper bounds for each parameter to be wrapped.
         """
-        self.wrap_bounds = wrap_bounds
-        self._upper_bounds = np.array([b[1] for b in wrap_bounds])
-        self._lower_bounds = np.array([b[0] for b in wrap_bounds])
+        self._upper_bounds = upper_bounds
+        self._lower_bounds = lower_bounds
         self._bounds_widths = self._upper_bounds - self._lower_bounds
-        try:
-            self.type = PriorType(type.lower())
-        except ValueError:
-            raise ValueError(f"Unknown prior type: {type}")
 
-        prior_cls = _AVAILABLE_PRIORS[self.type]
-        self._base = prior_cls(**kwargs)
+        super().__init__(
+            lower_bounds=self._lower_bounds, upper_bounds=self._upper_bounds
+        )
 
     def _wrap(self, model_params: np.ndarray) -> np.ndarray:
         """Wrap model parameters around the specified bounds.
@@ -79,7 +64,7 @@ class WrappedPrior:
             Log-prior value(s) from the base prior, evaluated at the wrapped parameters.
             Returns scalar (0D array) for 1D input, array for 2D input.
         """
-        return self._base(self._wrap(model_params))
+        return super().__call__(self._wrap(model_params))
 
     def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
         """Sample from the wrapped prior.
@@ -98,4 +83,4 @@ class WrappedPrior:
         samples : ndarray, shape (num_samples, n)
             Samples drawn from the wrapped prior.
         """
-        return self._base.sample(num_samples, rng)
+        return super().sample(num_samples, rng)
