@@ -8,8 +8,28 @@ from sampling.priors.uniform import UniformPrior
 
 
 class WrappedUniformPrior(UniformPrior):
-    """A uniform prior that wraps parameters around its bounds."""
+    """A uniform prior that wraps parameters around their bounds.
 
+    This prior behaves like :class:`UniformPrior` over the interval
+    ``[lower_bounds, upper_bounds]`` for each parameter, but values outside
+    these intervals are wrapped periodically back into the valid range
+    before the log-prior is evaluated.
+
+    Parameters
+    ----------
+    lower_bounds : numpy.ndarray, shape (n,)
+        Lower bounds for each parameter to be wrapped.
+    upper_bounds : numpy.ndarray, shape (n,)
+        Upper bounds for each parameter to be wrapped.
+
+    Raises
+    ------
+    ValueError
+        If ``lower_bounds`` and ``upper_bounds`` have different shapes, if any
+        element of ``lower_bounds`` is greater than or equal to the corresponding
+        element of ``upper_bounds``, or if the bounds are otherwise invalid for
+        constructing a :class:`UniformPrior`.
+    """
     def __init__(
         self,
         lower_bounds: np.ndarray,
