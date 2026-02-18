@@ -35,6 +35,9 @@ class WrappedPrior:
             The type of prior to be wrapped.
         """
         self.wrap_bounds = wrap_bounds
+        self._upper_bounds = np.array([b[1] for b in wrap_bounds])
+        self._lower_bounds = np.array([b[0] for b in wrap_bounds])
+        self._bounds_widths = self._upper_bounds - self._lower_bounds
         try:
             self.type = PriorType(type.lower())
         except ValueError:
@@ -46,6 +49,8 @@ class WrappedPrior:
     def _wrap(self, model_params: np.ndarray) -> np.ndarray:
         """Wrap model parameters around the specified bounds.
 
+        w = (x - lower) % width + lower
+
         Parameters
         ----------
         model_params : ndarray
@@ -56,13 +61,9 @@ class WrappedPrior:
         wrapped_params : ndarray
             Wrapped model parameters, with the same shape as the input.
         """
-        wrapped_params = model_params.copy()
-        for i, (lower, upper) in enumerate(self.wrap_bounds):
-            range_width = upper - lower
-            wrapped_params[..., i] = (
-                wrapped_params[..., i] - lower
-            ) % range_width + lower
-        return wrapped_params
+        return (
+            model_params - self._lower_bounds
+        ) % self._bounds_widths + self._lower_bounds
 
     def __call__(self, model_params: np.ndarray) -> np.ndarray:
         """Calculate the log-prior for given model parameters, after wrapping.
@@ -78,5 +79,4 @@ class WrappedPrior:
             Log-prior value(s) from the base prior, evaluated at the wrapped parameters.
             Returns scalar (0D array) for 1D input, array for 2D input.
         """
-        wrapped_params = self._wrap(model_params)
-        return self._base(wrapped_params)
+        return self._base(self._wrap(model_params))
