@@ -12,11 +12,11 @@ def test_valid_initialisation() -> None:
     prior = WrappedUniformPrior(lower_bounds, upper_bounds)
 
     assert issubclass(WrappedUniformPrior, UniformPrior)
-    assert prior.lower_bounds == np.array([-180.0])
-    assert prior.upper_bounds == np.array([180.0])
+    np.testing.assert_array_equal(prior.lower_bounds, np.array([-180.0]))
+    np.testing.assert_array_equal(prior.upper_bounds, np.array([180.0]))
     assert prior.n == 1
-    assert prior.config_params[0] == lower_bounds
-    assert prior.config_params[1] == upper_bounds
+    np.testing.assert_array_equal(prior.config_params[0], lower_bounds)
+    np.testing.assert_array_equal(prior.config_params[1], upper_bounds)
 
 
 @pytest.fixture
