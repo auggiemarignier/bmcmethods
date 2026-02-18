@@ -68,25 +68,6 @@ class WrappedUniformPrior(UniformPrior):
         """
         return super().__call__(self._wrap(model_params))
 
-    def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
-        """Sample from the wrapped prior.
-
-        In practice this just samples from the base prior.
-
-        Parameters
-        ----------
-        num_samples : int
-            Number of samples to draw.
-        rng : np.random.Generator
-            Random number generator.
-
-        Returns
-        -------
-        samples : ndarray, shape (num_samples, n)
-            Samples drawn from the wrapped prior.
-        """
-        return super().sample(num_samples, rng)
-
 
 class WrappedUniformPriorComponentConfig:
     """Configuration for a Wrapped Uniform prior component."""
