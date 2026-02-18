@@ -13,10 +13,12 @@ from ._protocols import PriorComponentConfig, PriorType
 from .component import PriorComponent
 from .gaussian import GaussianPriorComponentConfig
 from .uniform import UniformPrior, UniformPriorComponentConfig
+from .wrapped import WrappedUniformPriorComponentConfig
 
 _CONFIG_FACTORIES: dict[PriorType, type[PriorComponentConfig]] = {
     PriorType.GAUSSIAN: GaussianPriorComponentConfig,
     PriorType.UNIFORM: UniformPriorComponentConfig,
+    PriorType.WRAPPED_UNIFORM: WrappedUniformPriorComponentConfig,
 }
 
 

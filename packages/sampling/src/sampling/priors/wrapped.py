@@ -2,6 +2,8 @@
 
 import numpy as np
 
+from sampling.priors import PriorComponent
+from sampling.priors._protocols import PriorType
 from sampling.priors.uniform import UniformPrior
 
 
@@ -84,3 +86,27 @@ class WrappedUniformPrior(UniformPrior):
             Samples drawn from the wrapped prior.
         """
         return super().sample(num_samples, rng)
+
+
+class WrappedUniformPriorComponentConfig:
+    """Configuration for a Wrapped Uniform prior component."""
+
+    type = PriorType.WRAPPED_UNIFORM
+
+    def __init__(
+        self,
+        lower_bounds: list[float] | np.ndarray,
+        upper_bounds: list[float] | np.ndarray,
+        indices: list[int],
+    ) -> None:
+        self.lower_bounds = lower_bounds
+        self.upper_bounds = upper_bounds
+        self.indices = indices
+
+    def to_prior_component(self) -> PriorComponent:
+        """Build a PriorComponent from this config."""
+        lower = np.asarray(self.lower_bounds)
+        upper = np.asarray(self.upper_bounds)
+        prior_fn = WrappedUniformPrior(lower_bounds=lower, upper_bounds=upper)
+
+        return PriorComponent(prior_fn=prior_fn, indices=self.indices)
