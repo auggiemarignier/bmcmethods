@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ._protocols import PriorFunction
+from ._protocols import PriorFunction, PriorType
 from ._utils import _normalise_indices
 
 
@@ -25,6 +25,7 @@ class PriorComponent:
         Will be converted to a sorted numpy array internally.
     """
 
+    type: PriorType
     prior_fn: PriorFunction
     indices: Sequence[int] | slice | np.ndarray
 

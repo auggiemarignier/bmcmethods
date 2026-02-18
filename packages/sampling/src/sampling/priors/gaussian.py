@@ -138,4 +138,4 @@ class GaussianPriorComponentConfig:
         inv_covar = np.asarray(self.inv_covar)
         prior_fn = GaussianPrior(mean=mean, inv_covar=inv_covar)
 
-        return PriorComponent(prior_fn=prior_fn, indices=self.indices)
+        return PriorComponent(type=self.type, prior_fn=prior_fn, indices=self.indices)

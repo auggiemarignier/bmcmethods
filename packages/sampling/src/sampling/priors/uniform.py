@@ -120,4 +120,4 @@ class UniformPriorComponentConfig:
         upper = np.asarray(self.upper_bounds)
         prior_fn = UniformPrior(lower_bounds=lower, upper_bounds=upper)
 
-        return PriorComponent(prior_fn=prior_fn, indices=self.indices)
+        return PriorComponent(type=self.type, prior_fn=prior_fn, indices=self.indices)
