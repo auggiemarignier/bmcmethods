@@ -84,17 +84,27 @@ def test_multidimensional_batched_wrapping() -> None:
     assert wrapped_model_params.shape == model_params.shape
 
 
-def test_call(wrapped_prior: WrappedUniformPrior) -> None:
-    """Test that calling the WrappedPrior returns the log-prior from the base prior, modulo wrapping."""
+@pytest.mark.parametrize(
+    "model_param, expected_param",
+    [
+        (-181.0, 179.0),   # out of bounds, should wrap
+        (-180.0, -180.0),  # lower boundary
+        (0.0, 0.0),        # within bounds
+        (179.0, 179.0),    # upper boundary - 1
+        (180.0, 180.0),    # upper boundary
+    ],
+)
+def test_call(
+    wrapped_prior: WrappedUniformPrior, model_param: float, expected_param: float
+) -> None:
+    """Test that calling the WrappedPrior returns the same log-prior as the base UniformPrior, with wrapping only for out-of-bounds parameters."""
 
-    model_params = np.array([-181.0])  # This should wrap to 179.0
+    model_params = np.array([model_param])
     log_prior = wrapped_prior(model_params)
 
-    wrapped_params = np.array([179.0])
+    base_params = np.array([expected_param])
     uniform = UniformPrior(wrapped_prior.lower_bounds, wrapped_prior.upper_bounds)
-    expected_log_prior = uniform(
-        wrapped_params
-    )  # Calculate expected log-prior using the base prior with wrapped parameters
+    expected_log_prior = uniform(base_params)
 
     np.testing.assert_allclose(log_prior, expected_log_prior)
 
