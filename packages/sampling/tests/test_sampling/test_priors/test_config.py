@@ -6,6 +6,10 @@ from sampling.priors import PriorComponent
 from sampling.priors.compound import CompoundPrior, CompoundPriorConfig
 from sampling.priors.gaussian import GaussianPrior, GaussianPriorComponentConfig
 from sampling.priors.uniform import UniformPrior, UniformPriorComponentConfig
+from sampling.priors.wrapped import (
+    WrappedUniformPrior,
+    WrappedUniformPriorComponentConfig,
+)
 
 
 class TestUniformPriorComponentConfig:
@@ -127,6 +131,138 @@ class TestUniformPriorComponentConfig:
         result_out = component.prior_fn(np.array([[11.0]]))
         assert result_out.shape == ()
         assert result_out == -np.inf
+
+
+class TestWrappedUniformPriorComponentConfig:
+    """Tests for WrappedUniformPriorComponentConfig."""
+
+    def test_init_with_lists(self) -> None:
+        """Test initialization with lists."""
+        config = WrappedUniformPriorComponentConfig(
+            lower_bounds=[0.0, 1.0],
+            upper_bounds=[2.0, 3.0],
+            indices=[0, 1],
+        )
+
+        assert config.lower_bounds == [0.0, 1.0]
+        assert config.upper_bounds == [2.0, 3.0]
+        assert config.indices == [0, 1]
+        assert config.type == "wrapped_uniform"
+
+    def test_init_with_arrays(self) -> None:
+        """Test initialization with numpy arrays."""
+        lower = np.array([0.0, 1.0])
+        upper = np.array([2.0, 3.0])
+        indices = [0, 1]
+
+        config = WrappedUniformPriorComponentConfig(
+            lower_bounds=lower,
+            upper_bounds=upper,
+            indices=indices,
+        )
+
+        assert np.array_equal(config.lower_bounds, lower)
+        assert np.array_equal(config.upper_bounds, upper)
+        assert config.indices == indices
+
+    def test_to_prior_component_with_lists(self) -> None:
+        """Test conversion to PriorComponent from lists."""
+        config = WrappedUniformPriorComponentConfig(
+            lower_bounds=[0.0, 1.0],
+            upper_bounds=[2.0, 3.0],
+            indices=[0, 1],
+        )
+
+        component = config.to_prior_component()
+
+        assert isinstance(component, PriorComponent)
+        assert isinstance(component.prior_fn, WrappedUniformPrior)
+        assert component.n == 2
+        np.testing.assert_array_equal(component.indices, np.array([0, 1]))
+        np.testing.assert_array_equal(
+            component.prior_fn.lower_bounds, np.array([0.0, 1.0])
+        )
+        np.testing.assert_array_equal(
+            component.prior_fn.upper_bounds, np.array([2.0, 3.0])
+        )
+
+    def test_to_prior_component_with_arrays(self) -> None:
+        """Test conversion to PriorComponent from arrays."""
+        lower = np.array([-180.0, -90.0, 0.0])
+        upper = np.array([180.0, 90.0, 360.0])
+
+        config = WrappedUniformPriorComponentConfig(
+            lower_bounds=lower,
+            upper_bounds=upper,
+            indices=[2, 3, 4],
+        )
+
+        component = config.to_prior_component()
+
+        assert isinstance(component, PriorComponent)
+        assert component.n == 3
+        np.testing.assert_array_equal(component.indices, np.array([2, 3, 4]))
+
+    def test_to_prior_component_functional(self) -> None:
+        """Test that the generated prior component functions correctly."""
+        config = WrappedUniformPriorComponentConfig(
+            lower_bounds=[-180.0, -180.0],
+            upper_bounds=[180.0, 180.0],
+            indices=[0, 1],
+        )
+
+        component = config.to_prior_component()
+
+        # In bounds
+        params_in = np.array([[0.0, 0.0]])
+        result = component.prior_fn(params_in)
+        assert result.shape == ()
+        assert result == component.prior_fn._normalisation
+
+        # Out of bounds - should wrap and still give valid log-prior
+        params_out = np.array([[360.0, -360.0]])  # Should wrap to 0.0, 0.0
+        result = component.prior_fn(params_out)
+        assert result.shape == ()
+        assert result == component.prior_fn._normalisation  # Same as in-bounds after wrapping
+
+        # Test wrapping behavior - parameters differing by full range should be equivalent
+        params_wrapped = np.array([[10.0, 10.0]])
+        params_unwrapped = np.array([[370.0, -350.0]])  # 10 + 360, 10 - 360
+        result_wrapped = component.prior_fn(params_wrapped)
+        result_unwrapped = component.prior_fn(params_unwrapped)
+        np.testing.assert_allclose(result_wrapped, result_unwrapped)
+
+    def test_to_prior_component_invalid_bounds(self) -> None:
+        """Test that invalid bounds raise ValueError when building component."""
+        config = WrappedUniformPriorComponentConfig(
+            lower_bounds=[1.0, 0.0],
+            upper_bounds=[0.0, 1.0],  # First bound is invalid
+            indices=[0, 1],
+        )
+
+        with pytest.raises(ValueError, match="lower bound must be less than"):
+            config.to_prior_component()
+
+    def test_single_parameter_config(self) -> None:
+        """Test configuration for a single parameter."""
+        config = WrappedUniformPriorComponentConfig(
+            lower_bounds=[-180.0],
+            upper_bounds=[180.0],
+            indices=[3],
+        )
+
+        component = config.to_prior_component()
+        assert component.n == 1
+
+        # Test in bounds
+        result = component.prior_fn(np.array([[0.0]]))
+        assert result.shape == ()
+        assert result == component.prior_fn._normalisation
+
+        # Test wrapping behavior
+        result_in = component.prior_fn(np.array([[10.0]]))
+        result_wrapped = component.prior_fn(np.array([[370.0]]))  # 10 + 360
+        np.testing.assert_allclose(result_in, result_wrapped)
 
 
 class TestGaussianPriorComponentConfig:

@@ -8,6 +8,7 @@ from sampling.priors import (
     PriorComponent,
     UniformPrior,
 )
+from sampling.priors._protocols import PriorType
 
 
 class TestPriorComponent:
@@ -20,7 +21,9 @@ class TestPriorComponent:
         prior_fn = GaussianPrior(mean, covar)
         indices = [0, 1]
 
-        component = PriorComponent(prior_fn=prior_fn, indices=indices)
+        component = PriorComponent(
+            type=PriorType.GAUSSIAN, prior_fn=prior_fn, indices=indices
+        )
 
         assert component.prior_fn is prior_fn
         np.testing.assert_array_equal(component.indices, np.array(indices))
@@ -33,7 +36,9 @@ class TestPriorComponent:
         prior_fn = UniformPrior(lower, upper)
         indices = slice(0, 2)
 
-        component = PriorComponent(prior_fn=prior_fn, indices=indices)
+        component = PriorComponent(
+            type=PriorType.UNIFORM, prior_fn=prior_fn, indices=indices
+        )
 
         assert component.prior_fn is prior_fn
         np.testing.assert_array_equal(component.indices, np.arange(0, 2))
@@ -50,13 +55,17 @@ class TestCompoundPrior:
         mean = np.array([0.0, 0.0])
         covar = np.eye(2)
         gaussian_prior = GaussianPrior(mean, covar)
-        gaussian_component = PriorComponent(prior_fn=gaussian_prior, indices=[0, 1])
+        gaussian_component = PriorComponent(
+            type=PriorType.GAUSSIAN, prior_fn=gaussian_prior, indices=[0, 1]
+        )
 
         # Uniform prior on last two parameters
         lower = np.array([-1.0, -1.0])
         upper = np.array([1.0, 1.0])
         uniform_prior = UniformPrior(lower, upper)
-        uniform_component = PriorComponent(prior_fn=uniform_prior, indices=[2, 3])
+        uniform_component = PriorComponent(
+            type=PriorType.UNIFORM, prior_fn=uniform_prior, indices=[2, 3]
+        )
 
         # Combine into compound prior
         return CompoundPrior([gaussian_component, uniform_component])
@@ -161,8 +170,12 @@ class TestCompoundPrior:
         uniform_prior = UniformPrior(lower, upper)
         compound_prior = CompoundPrior(
             [
-                PriorComponent(prior_fn=gaussian_prior, indices=[0, 1]),
-                PriorComponent(prior_fn=uniform_prior, indices=[2, 3]),
+                PriorComponent(
+                    type=PriorType.GAUSSIAN, prior_fn=gaussian_prior, indices=[0, 1]
+                ),
+                PriorComponent(
+                    type=PriorType.UNIFORM, prior_fn=uniform_prior, indices=[2, 3]
+                ),
             ],
         )
 
@@ -182,3 +195,36 @@ class TestCompoundPrior:
 
         assert batched_results.shape == (4,)
         np.testing.assert_allclose(individual_results, batched_results)
+
+    def test_initialisation_from_dict(self) -> None:
+        """Test that CompoundPrior can be initialised from a configuration dictionary."""
+        config_dict = {
+            "components": [
+                {
+                    "type": "gaussian",
+                    "mean": [0.0, 0.0],
+                    "inv_covar": [[1.0, 0.0], [0.0, 1.0]],
+                    "indices": [0, 1],
+                },
+                {
+                    "type": "uniform",
+                    "lower_bounds": [-1.0, -1.0],
+                    "upper_bounds": [1.0, 1.0],
+                    "indices": [2, 3],
+                },
+                {
+                    "type": "wrapped_uniform",
+                    "lower_bounds": [0.0],
+                    "upper_bounds": [360.0],
+                    "indices": [4],
+                },
+            ]
+        }
+
+        compound_prior = CompoundPrior.from_dict(config_dict)
+
+        assert isinstance(compound_prior, CompoundPrior)
+        assert len(compound_prior.prior_components) == 3
+        assert compound_prior.prior_components[0].type == PriorType.GAUSSIAN
+        assert compound_prior.prior_components[1].type == PriorType.UNIFORM
+        assert compound_prior.prior_components[2].type == PriorType.WRAPPED_UNIFORM

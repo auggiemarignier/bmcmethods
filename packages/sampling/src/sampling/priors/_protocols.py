@@ -16,6 +16,7 @@ class PriorType(StrEnum):
 
     GAUSSIAN = auto()
     UNIFORM = auto()
+    WRAPPED_UNIFORM = auto()
 
 
 class PriorFunction(Protocol):

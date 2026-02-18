@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ._protocols import PriorFunction
+from ._protocols import PriorFunction, PriorType
 from ._utils import _normalise_indices
 
 
@@ -18,6 +18,8 @@ class PriorComponent:
 
     Parameters
     ----------
+    type : PriorType
+        Type of prior (GAUSSIAN, UNIFORM, or WRAPPED_UNIFORM).
     prior_fn : PriorFunction
         Prior function that takes model parameters and returns the log-prior.
     indices : Sequence[int] | slice | np.ndarray
@@ -25,6 +27,7 @@ class PriorComponent:
         Will be converted to a sorted numpy array internally.
     """
 
+    type: PriorType
     prior_fn: PriorFunction
     indices: Sequence[int] | slice | np.ndarray
 
