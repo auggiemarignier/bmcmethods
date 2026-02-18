@@ -117,3 +117,6 @@ def test_sample(wrapped_prior: WrappedUniformPrior) -> None:
     samples = wrapped_prior.sample(num_samples=num_samples, rng=rng)
 
     assert samples.shape == (num_samples, wrapped_prior.n)
+    # Verify that all samples lie within the wrapped prior bounds
+    assert np.all(samples >= wrapped_prior.lower_bounds)
+    assert np.all(samples <= wrapped_prior.upper_bounds)
