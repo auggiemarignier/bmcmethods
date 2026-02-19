@@ -60,7 +60,7 @@ class GaussianLikelihood:
         # Setting the gradient function based on the availability of forward function gradient
         # Doing it here avoids checking for gradients every time the gradient method is called, improving efficiency
         if forward_fn_gradient is not None:
-            self.gradient_fn = self._gradient(forward_fn_gradient)
+            self.gradient_fn = self._choose_gradient_function(forward_fn_gradient)
         else:
             self.gradient_fn = self._gradient_not_available
 
@@ -99,13 +99,36 @@ class GaussianLikelihood:
         """
         return self.gradient_fn(model_params)
 
-    def _gradient(
+    def _choose_gradient_function(
         self, forward_fn_gradient: Callable[[np.ndarray], np.ndarray]
     ) -> Callable[[np.ndarray], np.ndarray]:
         """
-        Create a function to compute the gradient of the log-likelihood with respect to model parameters.
+        Choose the appropriate gradient computation function based on the shape of the inverse covariance matrix.
 
-        grad = J^T @ inv_covar @ residuals, where J is the Jacobian of the forward function (grad_predicted) and residuals = observed_data - predicted_data.
+        Parameters
+        ----------
+        forward_fn_gradient : Callable[[np.ndarray], np.ndarray]
+            Gradient of the forward function with respect to model parameters.
+
+        Returns
+        -------
+        gradient_fn : Callable[[ndarray], ndarray]
+            Function that computes the gradient of the log-likelihood.
+        """
+        if self.inv_covar.ndim == 2:
+            return self._gradient_full(forward_fn_gradient)
+        elif self.inv_covar.ndim == 1 and self.inv_covar.size > 1:
+            return self._gradient_diagonal(forward_fn_gradient)
+        else:
+            return self._gradient_scalar(forward_fn_gradient)
+
+    def _gradient_full(
+        self, forward_fn_gradient: Callable[[np.ndarray], np.ndarray]
+    ) -> Callable[[np.ndarray], np.ndarray]:
+        """
+        Create a gradient function for a full inverse covariance matrix.
+
+        grad = J^T @ inv_covar @ residuals, where J is the Jacobian of the forward function and residuals = observed_data - predicted_data.
 
         Parameters
         ----------
@@ -132,6 +155,70 @@ class GaussianLikelihood:
             )  # Shape (batch, n, ndim)
             gradient = np.einsum(
                 "bnj,bn->bj", grad_predicted, residuals
+            )  # Shape (batch, ndim)
+            return gradient.squeeze()  # Return shape (ndim,) if input was 1 sample
+
+        return gradient
+
+    def _gradient_diagonal(
+        self, forward_fn_gradient: Callable[[np.ndarray], np.ndarray]
+    ) -> Callable[[np.ndarray], np.ndarray]:
+        """
+        Create a gradient function for a diagonal inverse covariance matrix (represented as a 1D vector).
+
+        Parameters
+        ----------
+        forward_fn_gradient : Callable[[np.ndarray], np.ndarray]
+            Gradient of the forward function with respect to model parameters.
+
+        Returns
+        -------
+        gradient_fn : Callable[[ndarray], ndarray]
+            Function that computes the gradient of the log-likelihood.
+        """
+
+        def gradient(model_params: np.ndarray) -> np.ndarray:
+            model_params = np.atleast_2d(model_params)  # Ensure shape is (batch, ndim)
+            predicted = self.forward_fn(model_params)
+            residuals = self.observed_data[None, :] - predicted  # Shape (batch, n)
+            J = np.atleast_3d(
+                forward_fn_gradient(model_params)
+            )  # Shape (batch, n, ndim)
+            weighted_residuals = residuals * self.inv_covar  # Shape (batch, n)
+            gradient = np.einsum(
+                "bni,bn->bi", J, weighted_residuals
+            )  # Shape (batch, ndim)
+            return gradient.squeeze()  # Return shape (ndim,) if input was 1 sample
+
+        return gradient
+
+    def _gradient_scalar(
+        self, forward_fn_gradient: Callable[[np.ndarray], np.ndarray]
+    ) -> Callable[[np.ndarray], np.ndarray]:
+        """
+        Create a gradient function for a scalar inverse covariance.
+
+        Parameters
+        ----------
+        forward_fn_gradient : Callable[[np.ndarray], np.ndarray]
+            Gradient of the forward function with respect to model parameters.
+
+        Returns
+        -------
+        gradient_fn : Callable[[ndarray], ndarray]
+            Function that computes the gradient of the log-likelihood.
+        """
+
+        def gradient(model_params: np.ndarray) -> np.ndarray:
+            model_params = np.atleast_2d(model_params)  # Ensure shape is (batch, ndim)
+            predicted = self.forward_fn(model_params)
+            residuals = self.observed_data[None, :] - predicted  # Shape (batch, n)
+            J = np.atleast_3d(
+                forward_fn_gradient(model_params)
+            )  # Shape (batch, n, ndim)
+            weighted_residuals = residuals * self.inv_covar.item()  # Shape (batch, n)
+            gradient = np.einsum(
+                "bni,bn->bi", J, weighted_residuals
             )  # Shape (batch, ndim)
             return gradient.squeeze()  # Return shape (ndim,) if input was 1 sample
 
