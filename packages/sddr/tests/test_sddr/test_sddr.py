@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from harmonic.model import FlowModel, RealNVPModel, RQSplineModel
 from pydantic import ValidationError
-from sampling.priors import CompoundPrior, GaussianPrior, PriorComponent
+from sampling.priors import CompoundPrior, GaussianPrior, PriorComponent, PriorType
 from sddr.sddr import (
     FlowConfig,
     FlowModelConfig,
@@ -102,7 +102,7 @@ class TestSDDR:
         prior = CompoundPrior(
             [
                 PriorComponent(
-                    type="gaussian",
+                    type=PriorType.GAUSSIAN,
                     prior_fn=GaussianPrior(np.zeros(2), np.eye(2)),
                     indices=np.arange(2),
                 )
@@ -129,7 +129,7 @@ class TestSDDR:
         prior = CompoundPrior(
             [
                 PriorComponent(
-                    type="gaussian",
+                    type=PriorType.GAUSSIAN,
                     prior_fn=GaussianPrior(mean, covar),
                     indices=np.arange(2),
                 )
@@ -151,7 +151,7 @@ class TestSDDR:
         prior = CompoundPrior(
             [
                 PriorComponent(
-                    type="gaussian",
+                    type=PriorType.GAUSSIAN,
                     prior_fn=GaussianPrior(np.zeros(2), np.eye(2)),
                     indices=np.arange(2),
                 )
@@ -172,7 +172,7 @@ class TestSDDR:
         prior = CompoundPrior(
             [
                 PriorComponent(
-                    type="gaussian",
+                    type=PriorType.GAUSSIAN,
                     prior_fn=GaussianPrior(np.zeros(1), np.eye(1)),
                     indices=np.array([0]),
                 )
