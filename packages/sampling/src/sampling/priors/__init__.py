@@ -1,6 +1,6 @@
 """Prior definitions."""
 
-from ._protocols import PriorFunction
+from ._protocols import PriorFunction, PriorType
 from .component import PriorComponent
 from .compound import CompoundPrior
 from .gaussian import GaussianPrior
@@ -12,6 +12,7 @@ __all__ = [
     "GaussianPrior",
     "PriorComponent",
     "PriorFunction",
+    "PriorType",
     "UniformPrior",
     "WrappedUniformPrior",
 ]

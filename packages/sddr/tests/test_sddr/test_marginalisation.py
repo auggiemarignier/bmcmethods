@@ -9,6 +9,7 @@ from sampling.priors import (
     GaussianPrior,
     PriorComponent,
     PriorFunction,
+    PriorType,
     UniformPrior,
 )
 from sddr.marginalisation import marginalise_prior
@@ -123,13 +124,17 @@ def test_compound_prior_marginalisation() -> None:
     mean = np.array([0.0, 0.0])
     covar = np.eye(2)
     gaussian_prior = GaussianPrior(mean, covar)
-    gaussian_component = PriorComponent(prior_fn=gaussian_prior, indices=[0, 1])
+    gaussian_component = PriorComponent(
+        type=PriorType.GAUSSIAN, prior_fn=gaussian_prior, indices=[0, 1]
+    )
 
     # Uniform prior on last two parameters
     lower = np.array([-1.0, -1.0])
     upper = np.array([1.0, 1.0])
     uniform_prior = UniformPrior(lower, upper)
-    uniform_component = PriorComponent(prior_fn=uniform_prior, indices=[2, 3])
+    uniform_component = PriorComponent(
+        type=PriorType.UNIFORM, prior_fn=uniform_prior, indices=[2, 3]
+    )
 
     # Combine into compound prior
     compound_prior = CompoundPrior([gaussian_component, uniform_component])
@@ -158,13 +163,17 @@ def test_compound_prior_marginalisation_empty_indices() -> None:
     mean = np.array([0.0, 0.0])
     covar = np.eye(2)
     gaussian_prior = GaussianPrior(mean, covar)
-    gaussian_component = PriorComponent(prior_fn=gaussian_prior, indices=[0, 1])
+    gaussian_component = PriorComponent(
+        type=PriorType.GAUSSIAN, prior_fn=gaussian_prior, indices=[0, 1]
+    )
 
     # Uniform prior on last two parameters
     lower = np.array([-1.0, -1.0])
     upper = np.array([1.0, 1.0])
     uniform_prior = UniformPrior(lower, upper)
-    uniform_component = PriorComponent(prior_fn=uniform_prior, indices=[2, 3])
+    uniform_component = PriorComponent(
+        type=PriorType.UNIFORM, prior_fn=uniform_prior, indices=[2, 3]
+    )
 
     # Combine into compound prior
     compound_prior = CompoundPrior([gaussian_component, uniform_component])
@@ -182,19 +191,25 @@ def test_compound_prior_marginalisation_skip_component() -> None:
     mean = np.array([0.0, 0.0])
     covar = np.eye(2)
     gaussian_prior = GaussianPrior(mean, covar)
-    gaussian_component = PriorComponent(prior_fn=gaussian_prior, indices=[0, 1])
+    gaussian_component = PriorComponent(
+        type=PriorType.GAUSSIAN, prior_fn=gaussian_prior, indices=[0, 1]
+    )
 
     # Uniform prior on next two parameters
     lower = np.array([-1.0, -1.0])
     upper = np.array([1.0, 1.0])
     uniform_prior = UniformPrior(lower, upper)
-    uniform_component = PriorComponent(prior_fn=uniform_prior, indices=[2, 3])
+    uniform_component = PriorComponent(
+        type=PriorType.UNIFORM, prior_fn=uniform_prior, indices=[2, 3]
+    )
 
     # Another Gaussian prior on last parameter
     mean2 = np.array([5.0])
     covar2 = np.array([[2.0]])
     gaussian_prior2 = GaussianPrior(mean2, covar2)
-    gaussian_component2 = PriorComponent(prior_fn=gaussian_prior2, indices=[4])
+    gaussian_component2 = PriorComponent(
+        type=PriorType.GAUSSIAN, prior_fn=gaussian_prior2, indices=[4]
+    )
 
     # Combine into compound prior
     compound_prior = CompoundPrior(
@@ -226,13 +241,17 @@ def test_compound_prior_marginalisation_no_components_remain() -> None:
     mean = np.array([0.0, 0.0])
     covar = np.eye(2)
     gaussian_prior = GaussianPrior(mean, covar)
-    gaussian_component = PriorComponent(prior_fn=gaussian_prior, indices=[0, 1])
+    gaussian_component = PriorComponent(
+        type=PriorType.GAUSSIAN, prior_fn=gaussian_prior, indices=[0, 1]
+    )
 
     # Uniform prior on next two parameters
     lower = np.array([-1.0, -1.0])
     upper = np.array([1.0, 1.0])
     uniform_prior = UniformPrior(lower, upper)
-    uniform_component = PriorComponent(prior_fn=uniform_prior, indices=[2, 3])
+    uniform_component = PriorComponent(
+        type=PriorType.UNIFORM, prior_fn=uniform_prior, indices=[2, 3]
+    )
 
     # Combine into compound prior
     compound_prior = CompoundPrior([gaussian_component, uniform_component])

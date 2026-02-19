@@ -94,7 +94,7 @@ convention = "numpy"
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "packages"]
 addopts = ["-v", "--cov=src", "--cov-report=term-missing", "--cov-report=xml"]
 
 [tool.coverage.run]

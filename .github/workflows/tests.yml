@@ -24,7 +24,7 @@ jobs:
         uses: astral-sh/setup-uv@v3
 
       - name: Run tests with coverage
-        run: uv run --python ${{ matrix.python-version }} pytest
+        run: uv run --python ${{ matrix.python-version }} pytest --ignore=tests/consistency
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5

@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from harmonic.model import FlowModel, RealNVPModel, RQSplineModel
 from pydantic import ValidationError
-from sampling.priors import CompoundPrior, GaussianPrior, PriorComponent
+from sampling.priors import CompoundPrior, GaussianPrior, PriorComponent, PriorType
 from sddr.sddr import (
     FlowConfig,
     FlowModelConfig,
@@ -100,7 +100,13 @@ class TestSDDR:
         """Test basic SDDR calculation."""
         # Create a simple prior
         prior = CompoundPrior(
-            [PriorComponent(GaussianPrior(np.zeros(2), np.eye(2)), np.arange(2))]
+            [
+                PriorComponent(
+                    type=PriorType.GAUSSIAN,
+                    prior_fn=GaussianPrior(np.zeros(2), np.eye(2)),
+                    indices=np.arange(2),
+                )
+            ]
         )
 
         # Mock the posterior model
@@ -121,7 +127,13 @@ class TestSDDR:
         mean = np.array([1.0, 2.0])
         covar = np.eye(2)
         prior = CompoundPrior(
-            [PriorComponent(GaussianPrior(mean, covar), np.arange(2))]
+            [
+                PriorComponent(
+                    type=PriorType.GAUSSIAN,
+                    prior_fn=GaussianPrior(mean, covar),
+                    indices=np.arange(2),
+                )
+            ]
         )
 
         # Mock posterior that returns the same as prior
@@ -137,7 +149,13 @@ class TestSDDR:
     def test_sddr_with_different_values(self) -> None:
         """Test SDDR with different prior and posterior probabilities."""
         prior = CompoundPrior(
-            [PriorComponent(GaussianPrior(np.zeros(2), np.eye(2)), np.arange(2))]
+            [
+                PriorComponent(
+                    type=PriorType.GAUSSIAN,
+                    prior_fn=GaussianPrior(np.zeros(2), np.eye(2)),
+                    indices=np.arange(2),
+                )
+            ]
         )
 
         mock_posterior = MagicMock()
@@ -152,7 +170,13 @@ class TestSDDR:
     def test_sddr_returns_float(self) -> None:
         """Test that SDDR returns a Python float, not numpy scalar."""
         prior = CompoundPrior(
-            [PriorComponent(GaussianPrior(np.zeros(1), np.eye(1)), np.array([0]))]
+            [
+                PriorComponent(
+                    type=PriorType.GAUSSIAN,
+                    prior_fn=GaussianPrior(np.zeros(1), np.eye(1)),
+                    indices=np.array([0]),
+                )
+            ]
         )
 
         mock_posterior = MagicMock()
