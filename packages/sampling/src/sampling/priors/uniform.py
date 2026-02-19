@@ -62,6 +62,22 @@ class UniformPrior:
         log_priors[out_of_bounds] = -np.inf
         return log_priors.squeeze()  # Return scalar if input was 1D
 
+    def gradient(self, model_params: np.ndarray) -> np.ndarray:
+        """Gradient of the Uniform log-prior.
+
+        We take this to be 0 everywhere.
+
+        Parameters
+        ----------
+        model_params : ndarray, shape (..., n)
+
+        Returns
+        -------
+        ndarray, shape (..., n)
+            Gradient of the log-prior with respect to `model_params`.
+        """
+        return np.zeros_like(model_params)
+
     def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
         """Sample from the Uniform prior.
 
