@@ -259,3 +259,30 @@ def test_uniform_prior_batched_consistent_with_individual_calls(
 
     assert batched_results.shape == (4,)
     np.testing.assert_array_equal(individual_results, batched_results)
+
+
+def test_uniform_prior_gradient_single_sample(
+    valid_uniform_prior: UniformPrior,
+) -> None:
+    """Test that gradient is zero everywhere for a single sample."""
+    params = np.array([0.5, 0.5])
+    grad = valid_uniform_prior.gradient(params)
+
+    np.testing.assert_array_equal(grad, np.zeros_like(params))
+
+
+def test_uniform_prior_gradient_batched(
+    valid_uniform_prior: UniformPrior,
+) -> None:
+    """Test that gradient is zero everywhere for batched samples."""
+    params = np.array(
+        [
+            [0.5, 0.5],
+            [0.25, 0.75],
+            [0.0, 1.0],
+        ]
+    )
+    grad = valid_uniform_prior.gradient(params)
+
+    assert grad.shape == params.shape
+    np.testing.assert_array_equal(grad, np.zeros_like(params))
