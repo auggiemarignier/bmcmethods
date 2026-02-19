@@ -38,15 +38,23 @@ def test_gaussian_likelihood_factory() -> None:
     assert np.isclose(log_likelihood, expected_log_likelihood)
 
 
-def test_gaussian_likelihood_with_gradient() -> None:
+@pytest.mark.parametrize(
+    "inv_covar",
+    [
+        np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
+        np.array([1.0, 1.0, 1.0]),
+        np.array([1.0]),
+    ],
+    ids=["full_covariance", "diagonal_covariance", "scalar_covariance"],
+)
+def test_gaussian_likelihood_with_gradient(inv_covar) -> None:
     """Test the Gaussian likelihood factory with a gradient."""
     observed_data = np.array([1.0, 2.0, 3.0])
-    covar = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
 
     likelihood_fn = GaussianLikelihood(
         _dummy_forward_fn,
         observed_data,
-        covar,
+        inv_covar,
         forward_fn_gradient=_dummy_forward_fn_gradient,
     )
 
