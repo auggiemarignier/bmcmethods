@@ -65,6 +65,54 @@ def test_gaussian_likelihood_with_gradient() -> None:
     np.testing.assert_allclose(gradient, expected_gradient)
 
 
+def test_gaussian_likelihood_with_gradient_diagonal_covariance() -> None:
+    """Test Gaussian likelihood gradient with a diagonal inverse covariance."""
+    observed_data = np.array([1.0, 2.0, 3.0])
+    covar = np.array([2.0, 1.5, 1.0])
+
+    likelihood_fn = GaussianLikelihood(
+        _dummy_forward_fn,
+        observed_data,
+        covar,
+        forward_fn_gradient=_dummy_forward_fn_gradient,
+    )
+
+    # At the maximum-likelihood point, the gradient should be zero.
+    model_params = observed_data / 2.0
+    gradient = likelihood_fn.gradient(model_params)
+    expected_gradient = np.array([0.0, 0.0, 0.0])
+    np.testing.assert_allclose(gradient, expected_gradient)
+
+    # Away from the optimum, the gradient should include the diagonal scaling.
+    model_params = observed_data
+    gradient = likelihood_fn.gradient(model_params)
+    expected_gradient = 2 * covar * (observed_data - 2 * model_params)
+    np.testing.assert_allclose(gradient, expected_gradient)
+
+
+def test_gaussian_likelihood_with_gradient_scalar_covariance() -> None:
+    """Test Gaussian likelihood gradient with a scalar inverse covariance."""
+    observed_data = np.array([1.0, 2.0, 3.0])
+    covar = np.array([1.5])
+
+    likelihood_fn = GaussianLikelihood(
+        _dummy_forward_fn,
+        observed_data,
+        covar,
+        forward_fn_gradient=_dummy_forward_fn_gradient,
+    )
+
+    # At the maximum-likelihood point, the gradient should be zero.
+    model_params = observed_data / 2.0
+    gradient = likelihood_fn.gradient(model_params)
+    expected_gradient = np.array([0.0, 0.0, 0.0])
+    np.testing.assert_allclose(gradient, expected_gradient)
+
+    # Away from the optimum, the gradient should be uniformly scaled by the scalar.
+    model_params = observed_data
+    gradient = likelihood_fn.gradient(model_params)
+    expected_gradient = 2 * covar[0] * (observed_data - 2 * model_params)
+    np.testing.assert_allclose(gradient, expected_gradient)
 def test_invalid_asymmetric_covariance_matrix() -> None:
     """Test that an asymmetrical covariance matrix raises a ValueError."""
     observed_data = np.array([1.0, 2.0])
