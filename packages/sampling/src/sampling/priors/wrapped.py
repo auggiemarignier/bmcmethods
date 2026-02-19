@@ -30,6 +30,7 @@ class WrappedUniformPrior(UniformPrior):
         element of ``upper_bounds``, or if the bounds are otherwise invalid for
         constructing a :class:`UniformPrior`.
     """
+
     def __init__(
         self,
         lower_bounds: np.ndarray,
