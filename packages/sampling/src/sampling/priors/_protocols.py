@@ -43,6 +43,20 @@ class PriorFunction(Protocol):
             Log-prior value(s). Returns scalar (0D array) for 1D input, array for 2D input.
         """
 
+    def gradient(self, model_params: np.ndarray) -> np.ndarray:
+        """Calculate the gradient of the log-prior with respect to model parameters.
+
+        Parameters
+        ----------
+        model_params : ndarray
+            Model parameters. Can be 1D for a single model or 2D for a batch.
+
+        Returns
+        -------
+        gradient : ndarray
+            Gradient of the log-prior with respect to `model_params`. Shape matches `model_params`.
+        """
+
     def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
         """Sample from the prior.
 

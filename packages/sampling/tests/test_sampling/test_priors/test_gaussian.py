@@ -269,3 +269,54 @@ def test_gaussian_prior_batched_consistent_with_individual_calls() -> None:
 
     assert batched_results.shape == (5,)
     np.testing.assert_allclose(individual_results, batched_results)
+
+
+def test_gradient_single_vector() -> None:
+    """Gradient for a single vector with identity inv_covar equals -diff."""
+    mean = np.zeros(2)
+    inv_covar = np.eye(2)
+    gp = GaussianPrior(mean, inv_covar)
+
+    x = np.array([1.0, -1.0])
+    grad = gp.gradient(x)
+
+    expected = -(x - mean) @ inv_covar
+    np.testing.assert_allclose(grad, expected)
+
+
+def test_gradient_batched_matches_individual() -> None:
+    """Batched gradient has correct shape and matches per-row evaluations."""
+    mean = np.zeros(2)
+    inv_covar = np.eye(2)
+    gp = GaussianPrior(mean, inv_covar)
+
+    X = np.array([[0.0, 0.0], [1.0, -1.0], [0.5, 0.5]])
+    G = gp.gradient(X)
+
+    assert G.shape == X.shape
+    for i in range(X.shape[0]):
+        np.testing.assert_allclose(G[i], gp.gradient(X[i]))
+
+
+def test_gradient_matches_finite_difference() -> None:
+    """Compare analytic gradient to finite-difference approximation."""
+    rng = np.random.default_rng(42)
+    n = 3
+    mean = rng.normal(size=n)
+    A = rng.normal(size=(n, n))
+    inv_covar = A.T @ A  # positive definite
+    gp = GaussianPrior(mean, inv_covar)
+
+    x = rng.normal(size=n)
+    grad = gp.gradient(x)
+
+    eps = 1e-6
+    num_grad = np.zeros_like(x)
+    for i in range(n):
+        dx = np.zeros_like(x)
+        dx[i] = eps
+        f_plus = gp(x + dx)
+        f_minus = gp(x - dx)
+        num_grad[i] = (f_plus - f_minus) / (2 * eps)
+
+    np.testing.assert_allclose(grad, num_grad, rtol=1e-5, atol=1e-8)

@@ -53,6 +53,25 @@ class GaussianPrior:
         )
         return log_priors.squeeze()  # Return scalar if input was 1D
 
+    def gradient(self, model_params: np.ndarray) -> np.ndarray:
+        """Gradient of the Gaussian log-prior.
+
+        Parameters
+        ----------
+        model_params : ndarray, shape (..., n)
+
+        Returns
+        -------
+        ndarray, shape (..., n)
+            Gradient of the log-prior with respect to `model_params`.
+        """
+        model_params = np.atleast_2d(model_params)  # shape (batch_size, n)
+        diff = model_params - self.mean
+        # Gradient of -0.5 * (x-m)^T inv_covar (x-m) is -inv_covar @ (x-m).
+        # For a batch of row vectors `diff`, compute row-wise as -(diff @ inv_covar).
+        gradients = -diff @ self.inv_covar  # Shape (batch_size, n)
+        return gradients.squeeze()
+
     def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
         """Sample from the Gaussian prior.
 
