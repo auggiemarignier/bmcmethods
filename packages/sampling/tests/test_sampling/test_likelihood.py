@@ -12,6 +12,17 @@ def _dummy_forward_fn(model_params: np.ndarray) -> np.ndarray:
     return model_params * 2.0
 
 
+def _dummy_forward_fn_gradient(model_params: np.ndarray) -> np.ndarray:
+    """A simple forward function gradient for testing purposes."""
+    if model_params.ndim == 1:
+        return 2 * np.eye(model_params.size)
+    else:
+        return np.stack(
+            [2 * np.eye(model_params.shape[1]) for _ in range(model_params.shape[0])],
+            axis=0,
+        )
+
+
 def test_gaussian_likelihood_factory() -> None:
     """Test the Gaussian likelihood factory."""
     observed_data = np.array([1.0, 2.0, 3.0])
@@ -25,6 +36,33 @@ def test_gaussian_likelihood_factory() -> None:
     expected_log_likelihood = 0.0  # Perfect match
 
     assert np.isclose(log_likelihood, expected_log_likelihood)
+
+
+def test_gaussian_likelihood_with_gradient() -> None:
+    """Test the Gaussian likelihood factory with a gradient."""
+    observed_data = np.array([1.0, 2.0, 3.0])
+    covar = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+
+    likelihood_fn = GaussianLikelihood(
+        _dummy_forward_fn,
+        observed_data,
+        covar,
+        forward_fn_gradient=_dummy_forward_fn_gradient,
+    )
+
+    model_params = observed_data / 2.0
+    gradient = likelihood_fn.gradient(model_params)
+
+    expected_gradient = np.array(
+        [0.0, 0.0, 0.0]
+    )  # Gradient should be zero at the maximum likelihood point
+
+    np.testing.assert_allclose(gradient, expected_gradient)
+
+    model_params = observed_data
+    gradient = likelihood_fn.gradient(model_params)
+    expected_gradient = 2 * (observed_data - 2 * model_params)  # From the formula
+    np.testing.assert_allclose(gradient, expected_gradient)
 
 
 def test_invalid_asymmetric_covariance_matrix() -> None:

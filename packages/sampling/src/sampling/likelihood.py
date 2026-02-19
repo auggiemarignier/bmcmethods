@@ -19,6 +19,7 @@ class GaussianLikelihood:
         inv_covar: float | np.ndarray,
         validate_covariance: bool = True,
         example_model: None | np.ndarray = None,
+        forward_fn_gradient: None | Callable[[np.ndarray], np.ndarray] = None,
     ) -> None:
         """
         Initialise the Gaussian likelihood.
@@ -37,6 +38,8 @@ class GaussianLikelihood:
             Whether to validate the inverse covariance matrix. Default is True.
         example_model : None | ndarray, optional
             Example model parameters to validate the forward function. If None (default), no validation is performed.
+        forward_fn_gradient : None | Callable[[np.ndarray], np.ndarray], optional
+            Gradient of the forward function with respect to model parameters. If None (default), no gradient is available.
 
         Raises
         ------
@@ -53,6 +56,13 @@ class GaussianLikelihood:
         self.observed_data = observed_data
         self.inv_covar = np.array(inv_covar)
         self._exp_term_fn = self._choose_exponential_term_function()
+
+        # Setting the gradient function based on the availability of forward function gradient
+        # Doing it here avoids checking for gradients every time the gradient method is called, improving efficiency
+        if forward_fn_gradient is not None:
+            self.gradient_fn = self._gradient(forward_fn_gradient)
+        else:
+            self.gradient_fn = self._gradient_not_available
 
     def __call__(self, model_params: np.ndarray) -> np.ndarray:
         """
@@ -72,6 +82,66 @@ class GaussianLikelihood:
         predicted = self.forward_fn(model_params)
         residuals = self.observed_data[None, :] - predicted
         return self._exp_term_fn(residuals).squeeze()  # Return scalar if input was 1D
+
+    def gradient(self, model_params: np.ndarray) -> np.ndarray:
+        """
+        Compute the gradient of the log-likelihood with respect to model parameters.
+
+        Parameters
+        ----------
+        model_params : ndarray, shape (ndim,) or (batch, ndim)
+            Model parameters. Can be a single parameter set or a batch.
+
+        Returns
+        -------
+        gradient : ndarray
+            The gradient of the log-likelihood with respect to model parameters.
+        """
+        return self.gradient_fn(model_params)
+
+    def _gradient(
+        self, forward_fn_gradient: Callable[[np.ndarray], np.ndarray]
+    ) -> Callable[[np.ndarray], np.ndarray]:
+        """
+        Create a function to compute the gradient of the log-likelihood with respect to model parameters.
+
+        grad = J^T @ inv_covar @ residuals, where J is the Jacobian of the forward function (grad_predicted) and residuals = observed_data - predicted_data.
+
+        Parameters
+        ----------
+        forward_fn_gradient : Callable[[np.ndarray], np.ndarray]
+            Gradient of the forward function with respect to model parameters.
+
+        Returns
+        -------
+        gradient_fn : Callable[[ndarray], ndarray]
+            Function that computes the gradient of the log-likelihood.
+        """
+
+        def gradient(model_params: np.ndarray) -> np.ndarray:
+            model_params = np.atleast_2d(model_params)  # Ensure shape is (batch, ndim)
+            predicted = self.forward_fn(model_params)
+            residuals = self.observed_data[None, :] - predicted  # Shape (batch, n)
+            J = np.atleast_3d(
+                forward_fn_gradient(model_params)
+            )  # Shape (batch, n, ndim)
+            # Compute J^T @ inv_covar @ residuals for each batch element
+            # Doing it this way avoids computing the full (batch x batch) matrix of residuals @ inv_covar @ residuals.T and then discarding all the off-diagonal terms
+            grad_predicted = np.einsum(
+                "bni,ij->bnj", J, self.inv_covar
+            )  # Shape (batch, n, ndim)
+            gradient = np.einsum(
+                "bnj,bn->bj", grad_predicted, residuals
+            )  # Shape (batch, ndim)
+            return gradient.squeeze()  # Return shape (ndim,) if input was 1 sample
+
+        return gradient
+
+    def _gradient_not_available(self, model_params: np.ndarray) -> np.ndarray:
+        """Raise an error if gradient functions are not provided."""
+        raise ValueError(
+            "Gradient function for the forward model must be provided to compute the likelihood gradient."
+        )
 
     def _choose_exponential_term_function(self) -> Callable[[np.ndarray], np.ndarray]:
         """
