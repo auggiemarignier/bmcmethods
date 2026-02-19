@@ -145,6 +145,7 @@ def _(
         # Create new component with indices in the new compound space
         n_kept = local_indices.size
         new_component = PriorComponent(
+            type=component.type,
             prior_fn=marginalised_prior,
             indices=np.arange(next_index, next_index + n_kept),
         )
