@@ -83,7 +83,7 @@ def mcmc(
 
     initial_pos = prior.sample(config.nwalkers, rng)
 
-    posterior = Posterior(likelihood, prior, likelihood.gradient, prior.gradient)
+    posterior = Posterior(likelihood, prior)
 
     _pool = DummyPool
     if config.parallel and not config.vectorise:
