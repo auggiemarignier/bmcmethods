@@ -120,6 +120,7 @@ class CompoundPrior:
             params_subset = model_params[:, component.indices]
 
             component_gradients = component.prior_fn.gradient(params_subset)
+            component_gradients = np.atleast_2d(component_gradients)
             total_gradients[:, component.indices] += component_gradients
 
         return total_gradients.squeeze()
