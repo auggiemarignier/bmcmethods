@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.3.5",
     "emcee>=3.1.6",
+    "pints>=0.5.1",
 ]
 
 [build-system]

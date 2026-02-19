@@ -6,6 +6,7 @@ from multiprocessing import Pool
 
 import numpy as np
 from emcee import EnsembleSampler
+from pints import LogPDF, MCMCController, NoUTurnMCMC
 
 from ._util import DummyPool
 from .posterior import Posterior
@@ -160,3 +161,37 @@ def _burn_and_thin_array(chain: np.ndarray, burn_in: int, thin: int) -> np.ndarr
         processed_chain = processed_chain[:, :, 0]
 
     return processed_chain
+
+
+def nuts(
+    ndim: int,
+    likelihood: Callable[[np.ndarray], float | np.ndarray],
+    prior: PriorFunction,
+    rng: np.random.Generator,
+    config: MCMCConfig | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """NUTS sampling using pints."""
+
+    posterior = Posterior(likelihood, prior)
+
+    class PintsPDF(LogPDF):
+        def __call__(self, x):
+            return posterior(x)
+
+        def evaluateS1(self, x):
+            return posterior(x), posterior.gradient(x)
+
+        def n_parameters(self):
+            return ndim
+
+    initial_pos = prior.sample(config.nwalkers, rng)
+    nuts_mcmc = MCMCController(
+        PintsPDF(), config.nwalkers, initial_pos, method=NoUTurnMCMC
+    )
+    nuts_mcmc.set_max_iterations(config.nsteps)
+    nuts_mcmc.set_log_to_screen(config.progress)
+    nuts_mcmc.set_log_pdf_storage(True)
+
+    chains = nuts_mcmc.run()
+    log_pdf = nuts_mcmc.log_pdfs()
+    return chains, log_pdf
