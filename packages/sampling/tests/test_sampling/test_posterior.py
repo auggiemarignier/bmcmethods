@@ -10,18 +10,12 @@ from sddr.marginalisation import marginalise_samples
 
 def _dummy_likelihood_fn(params):
     """Dummy likelihood function for pickling test."""
-    if params.ndim == 1:
-        return -0.5 * np.sum(params**2)
-    else:
-        return -0.5 * np.sum(params**2, axis=1)
+    return -0.5 * np.sum(params**2, axis=-1)
 
 
 def _dummy_prior_fn(params):
     """Dummy prior function for pickling test."""
-    if params.ndim == 1:
-        return -np.sum(np.abs(params))
-    else:
-        return -np.sum(np.abs(params), axis=1)
+    return -np.sum(np.abs(params), axis=-1)
 
 
 def test_posterior():
@@ -37,6 +31,44 @@ def test_posterior():
     expected_log_posterior = expected_log_likelihood + expected_log_prior
 
     assert np.isclose(log_posterior, expected_log_posterior)
+
+
+def test_posterior_with_gradient():
+    """Test the posterior with gradient functions."""
+
+    def likelihood_gradient_fn(params):
+        return -params
+
+    def prior_gradient_fn(params):
+        return -np.sign(params)
+
+    posterior_fn = Posterior(
+        _dummy_likelihood_fn, _dummy_prior_fn, likelihood_gradient_fn, prior_gradient_fn
+    )
+
+    params = np.array([1.0, 2.0, -1.5])
+    log_posterior = posterior_fn(params)
+    gradient = posterior_fn.gradient(params)
+
+    expected_log_likelihood = -0.5 * (1.0**2 + 2.0**2 + (-1.5) ** 2)
+    expected_log_prior = -(np.abs(1.0) + np.abs(2.0) + np.abs(-1.5))
+    expected_log_posterior = expected_log_likelihood + expected_log_prior
+    expected_gradient = -params - np.sign(params)
+
+    assert np.isclose(log_posterior, expected_log_posterior)
+    np.testing.assert_allclose(gradient, expected_gradient)
+
+
+def test_posterior_gradient_not_available():
+    """Test that calling the gradient method raises an error if gradient functions are not provided."""
+
+    posterior_fn = Posterior(_dummy_likelihood_fn, _dummy_prior_fn)
+
+    params = np.array([1.0, 2.0, -1.5])
+    with pytest.raises(
+        ValueError, match="Gradient functions for likelihood and prior must be provided"
+    ):
+        posterior_fn.gradient(params)
 
 
 def test_posterior_picklable():
