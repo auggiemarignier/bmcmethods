@@ -171,7 +171,31 @@ def nuts(
     rng: np.random.Generator,
     config: MCMCConfig | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """NUTS sampling using pints."""
+    """NUTS sampling using pints.
+
+    Parameters
+    ----------
+    ndim : int
+        Number of dimensions in the parameter space.
+    likelihood : GaussianLikelihood
+        Gaussian likelihood function with gradient support.
+    prior : PriorFunction
+        Prior function with gradient support.
+    rng : np.random.Generator
+        Random number generator for initializing walkers.
+    config : MCMCConfig or None, optional
+        MCMC configuration. If None, uses default configuration.
+        The following parameters are used: ``nwalkers``, ``nsteps``,
+        ``burn_in``, ``thin``, ``progress``.
+        The following parameters are ignored: ``vectorise``, ``parallel``.
+
+    Returns
+    -------
+    samples : ndarray, shape (num_samples, ndim)
+        MCMC samples of the model parameters, after burn-in and thinning.
+    lnprob : ndarray, shape (num_samples,)
+        Log-probabilities of the MCMC samples, after burn-in and thinning.
+    """
     if config is None:
         config = MCMCConfig()
 
@@ -195,6 +219,18 @@ def nuts(
     nuts_mcmc.set_log_to_screen(config.progress)
     nuts_mcmc.set_log_pdf_storage(True)
 
-    chains = nuts_mcmc.run()
-    log_pdf = nuts_mcmc.log_pdfs()
-    return chains.transpose(1, 0, 2), log_pdf.transpose(1, 0)
+    chains = nuts_mcmc.run()  # shape (nwalkers, nsteps, ndim)
+    log_pdf = nuts_mcmc.log_pdfs()  # shape (nwalkers, nsteps)
+
+    # Transpose to (nsteps, nwalkers, ndim) and (nsteps, nwalkers)
+    chains = chains.transpose(1, 0, 2)
+    log_pdf = log_pdf.transpose(1, 0)
+
+    # Apply burn-in and thinning
+    chains = _burn_and_thin_array(chains, config.burn_in, config.thin)
+    log_pdf = _burn_and_thin_array(log_pdf, config.burn_in, config.thin)
+
+    samples = np.ascontiguousarray(chains.reshape(-1, ndim))
+    lnprob = np.ascontiguousarray(log_pdf.reshape(-1))
+
+    return samples, lnprob

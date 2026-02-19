@@ -170,7 +170,10 @@ def test_nuts_uses_controller_and_returns_chains_and_logpdfs() -> None:
     chains, log_pdf = nuts(ndim, like, prior, rng, config=cfg)
 
     # Assertions: shapes and simple content checks
+    # With default burn_in=200 > nsteps=4, burn_in falls back to 0 (no samples discarded).
+    # With default thin=1, no thinning is applied.
+    # Results are flattened to (nsteps * nwalkers, ndim) and (nsteps * nwalkers,).
     assert isinstance(chains, np.ndarray)
     assert isinstance(log_pdf, np.ndarray)
-    assert chains.shape == (nsteps, nwalkers, ndim)
-    assert log_pdf.shape == (nsteps, nwalkers)
+    assert chains.shape == (nsteps * nwalkers, ndim)
+    assert log_pdf.shape == (nsteps * nwalkers,)
