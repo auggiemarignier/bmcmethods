@@ -99,6 +99,31 @@ class CompoundPrior:
 
         return total_log_priors.squeeze()  # Return scalar if input was 1D
 
+    def gradient(self, model_params: np.ndarray) -> np.ndarray:
+        """Gradient of the compound log-prior.
+
+        Parameters
+        ----------
+        model_params : ndarray, shape (..., n)
+            Model parameters to evaluate the gradient on.
+
+        Returns
+        -------
+        ndarray, shape (..., n)
+            Gradient of the compound log-prior with respect to the model parameters.
+        """
+        model_params = np.atleast_2d(model_params)  # shape (batch_size, n)
+        batch_size = model_params.shape[0]
+        total_gradients = np.zeros((batch_size, self._n))
+
+        for component in self.prior_components:
+            params_subset = model_params[:, component.indices]
+
+            component_gradients = component.prior_fn.gradient(params_subset)
+            total_gradients[:, component.indices] += component_gradients
+
+        return total_gradients.squeeze()
+
     def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
         """Sample from the compound prior.
 

@@ -196,6 +196,72 @@ class TestCompoundPrior:
         assert batched_results.shape == (4,)
         np.testing.assert_allclose(individual_results, batched_results)
 
+    def test_compound_prior_gradient_single_model(
+        self, compound_prior: CompoundPrior
+    ) -> None:
+        """Gradient for a single model equals sum of component gradients."""
+        model = np.array([1.0, -1.0, 0.0, 0.0])
+        grad = compound_prior.gradient(model)
+
+        # Gaussian on first two params with identity inv_covar -> gradient = -diff
+        expected = np.array([-(1.0 - 0.0), -(-1.0 - 0.0), 0.0, 0.0])
+        np.testing.assert_allclose(grad, expected)
+
+    def test_compound_prior_gradient_batched_models(
+        self, compound_prior: CompoundPrior
+    ) -> None:
+        """Batched gradient returns correct shape and matches individual evaluations."""
+        models = np.array(
+            [
+                [0.0, 0.0, 0.0, 0.0],
+                [1.0, -1.0, 0.5, -0.5],
+                [0.5, 0.5, 0.25, 0.75],
+            ]
+        )
+
+        batched_grad = compound_prior.gradient(models)
+        assert batched_grad.shape == (3, compound_prior.n)
+
+        for i in range(models.shape[0]):
+            np.testing.assert_allclose(
+                batched_grad[i], compound_prior.gradient(models[i])
+            )
+
+    def test_compound_prior_gradient_batched_consistent_with_individual_calls(
+        self,
+    ) -> None:
+        """Batched gradient equals stacking of individual gradients for a constructed compound prior."""
+        mean = np.array([0.0, 0.0])
+        covar = np.eye(2)
+        lower = np.array([-1.0, -1.0])
+        upper = np.array([1.0, 1.0])
+
+        gaussian_prior = GaussianPrior(mean, covar)
+        uniform_prior = UniformPrior(lower, upper)
+        compound_prior = CompoundPrior(
+            [
+                PriorComponent(
+                    type=PriorType.GAUSSIAN, prior_fn=gaussian_prior, indices=[0, 1]
+                ),
+                PriorComponent(
+                    type=PriorType.UNIFORM, prior_fn=uniform_prior, indices=[2, 3]
+                ),
+            ],
+        )
+
+        models = [
+            np.array([0.0, 0.0, 0.0, 0.0]),
+            np.array([1.0, -1.0, 0.5, -0.5]),
+            np.array([0.5, 0.5, 0.25, 0.75]),
+            np.array([0.1, 0.1, -0.8, 0.8]),
+        ]
+
+        individual_results = np.array([compound_prior.gradient(m) for m in models])
+        batched_results = compound_prior.gradient(np.array(models))
+
+        assert batched_results.shape == individual_results.shape
+        np.testing.assert_allclose(individual_results, batched_results)
+
     def test_initialisation_from_dict(self) -> None:
         """Test that CompoundPrior can be initialised from a configuration dictionary."""
         config_dict = {
