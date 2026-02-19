@@ -5,7 +5,9 @@ behaviour, and error on unimplemented prior initialisation.
 """
 
 import numpy as np
-from sampling.sampling import MCMCConfig, mcmc
+from sampling.likelihood import GaussianLikelihood
+from sampling.priors import UniformPrior
+from sampling.sampling import MCMCConfig, mcmc, nuts
 
 
 def likelihood_fn(theta: np.ndarray) -> np.ndarray:
@@ -32,6 +34,11 @@ class LogPrior:
     def sample(self, num_samples: int, rng: np.random.Generator) -> np.ndarray:
         """Sample from standard normal prior."""
         return rng.normal(0, 1, size=(num_samples, self.n))
+
+    def gradient(self, model_params: np.ndarray) -> np.ndarray:
+        """Gradient of the log-prior (zero for standard normal)."""
+        model_params = np.atleast_2d(model_params)
+        return np.zeros_like(model_params)
 
     @property
     def n(self) -> int:
@@ -121,3 +128,49 @@ def test_mcmc_excessive_thin_returns_unthinned(
     expected_steps = cfg.nsteps - cfg.burn_in
     assert samples.shape == (expected_steps * cfg.nwalkers, ndim)
     assert lnprob.shape == (expected_steps * cfg.nwalkers,)
+
+
+def test_nuts_uses_controller_and_returns_chains_and_logpdfs() -> None:
+    ndim = 2
+    nwalkers = 3
+    nsteps = 4
+
+    # Build a real GaussianLikelihood and a Prior matching PriorFunction (UniformPrior)
+    # Forward function: identity mapping from model params to observed data
+    def forward_fn(model_params: np.ndarray) -> np.ndarray:
+        model_params = np.atleast_2d(model_params)
+        return model_params  # (batch, ndim)
+
+    def forward_fn_gradient(model_params: np.ndarray) -> np.ndarray:
+        # Jacobian of identity is identity for each batch element
+        model_params = np.atleast_2d(model_params)
+        batch = model_params.shape[0]
+        return np.tile(np.eye(ndim)[None, :, :], (batch, 1, 1))  # (batch, n_obs, ndim)
+
+    observed = np.zeros(ndim)
+    inv_covar = np.eye(ndim)
+
+    like = GaussianLikelihood(
+        forward_fn,
+        observed,
+        inv_covar,
+        validate_covariance=True,
+        example_model=np.zeros(ndim),
+        forward_fn_gradient=forward_fn_gradient,
+    )
+
+    prior = UniformPrior(
+        lower_bounds=np.full(ndim, -1.0), upper_bounds=np.full(ndim, 1.0)
+    )
+
+    rng = np.random.default_rng(42)
+
+    # Call nuts
+    cfg = MCMCConfig(nwalkers=nwalkers, nsteps=nsteps, progress=False)
+    chains, log_pdf = nuts(ndim, like, prior, rng, config=cfg)
+
+    # Assertions: shapes and simple content checks
+    assert isinstance(chains, np.ndarray)
+    assert isinstance(log_pdf, np.ndarray)
+    assert chains.shape == (nsteps, nwalkers, ndim)
+    assert log_pdf.shape == (nsteps, nwalkers)

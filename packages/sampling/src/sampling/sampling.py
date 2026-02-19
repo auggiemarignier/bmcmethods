@@ -9,6 +9,7 @@ from emcee import EnsembleSampler
 from pints import LogPDF, MCMCController, NoUTurnMCMC
 
 from ._util import DummyPool
+from .likelihood import GaussianLikelihood
 from .posterior import Posterior
 from .priors import PriorFunction
 
@@ -82,7 +83,7 @@ def mcmc(
 
     initial_pos = prior.sample(config.nwalkers, rng)
 
-    posterior = Posterior(likelihood, prior)
+    posterior = Posterior(likelihood, prior, likelihood.gradient, prior.gradient)
 
     _pool = DummyPool
     if config.parallel and not config.vectorise:
@@ -165,14 +166,16 @@ def _burn_and_thin_array(chain: np.ndarray, burn_in: int, thin: int) -> np.ndarr
 
 def nuts(
     ndim: int,
-    likelihood: Callable[[np.ndarray], float | np.ndarray],
+    likelihood: GaussianLikelihood,
     prior: PriorFunction,
     rng: np.random.Generator,
     config: MCMCConfig | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """NUTS sampling using pints."""
+    if config is None:
+        config = MCMCConfig()
 
-    posterior = Posterior(likelihood, prior)
+    posterior = Posterior(likelihood, prior, likelihood.gradient, prior.gradient)
 
     class PintsPDF(LogPDF):
         def __call__(self, x):
@@ -194,4 +197,4 @@ def nuts(
 
     chains = nuts_mcmc.run()
     log_pdf = nuts_mcmc.log_pdfs()
-    return chains, log_pdf
+    return chains.transpose(1, 0, 2), log_pdf.transpose(1, 0)
