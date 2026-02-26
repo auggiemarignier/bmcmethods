@@ -130,6 +130,24 @@ def test_mcmc_excessive_thin_returns_unthinned(
     assert lnprob.shape == (expected_steps * cfg.nwalkers,)
 
 
+####################################################################################################
+# NUTS
+####################################################################################################
+
+
+def forward_fn(model_params: np.ndarray) -> np.ndarray:
+    model_params = np.atleast_2d(model_params)
+    return model_params  # (batch, ndim)
+
+
+def forward_fn_gradient(model_params: np.ndarray) -> np.ndarray:
+    # Jacobian of identity is identity for each batch element
+    model_params = np.atleast_2d(model_params)
+    batch = model_params.shape[0]
+    ndim = model_params.shape[1]
+    return np.tile(np.eye(ndim)[None, :, :], (batch, 1, 1))  # (batch, n_obs, ndim)
+
+
 def test_nuts_uses_controller_and_returns_chains_and_logpdfs() -> None:
     ndim = 2
     nwalkers = 3
@@ -137,15 +155,6 @@ def test_nuts_uses_controller_and_returns_chains_and_logpdfs() -> None:
 
     # Build a real GaussianLikelihood and a Prior matching PriorFunction (UniformPrior)
     # Forward function: identity mapping from model params to observed data
-    def forward_fn(model_params: np.ndarray) -> np.ndarray:
-        model_params = np.atleast_2d(model_params)
-        return model_params  # (batch, ndim)
-
-    def forward_fn_gradient(model_params: np.ndarray) -> np.ndarray:
-        # Jacobian of identity is identity for each batch element
-        model_params = np.atleast_2d(model_params)
-        batch = model_params.shape[0]
-        return np.tile(np.eye(ndim)[None, :, :], (batch, 1, 1))  # (batch, n_obs, ndim)
 
     observed = np.zeros(ndim)
     inv_covar = np.eye(ndim)
