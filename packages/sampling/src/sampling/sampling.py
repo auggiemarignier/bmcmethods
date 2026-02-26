@@ -28,8 +28,8 @@ class MCMCConfig:
         Number of burn-in steps to discard.
     vectorise : bool
         Whether to vectorize the likelihood and prior evaluations.
-    parallel : bool
-        Whether to use parallel processing. Ignored if vectorise is True.
+    parallel : bool or int
+        Whether to use parallel processing. If an integer is given, it specifies the number of processes to use.
     progress : bool
         Whether to display a progress bar.
     thin : int
@@ -40,7 +40,7 @@ class MCMCConfig:
     nsteps: int = 1000
     burn_in: int = 200
     vectorise: bool = False
-    parallel: bool = True
+    parallel: bool | int = True
     progress: bool = True
     thin: int = 1
 
@@ -228,7 +228,7 @@ def nuts(
     nuts_mcmc.set_max_iterations(config.nsteps)
     nuts_mcmc.set_log_to_screen(config.progress)
     nuts_mcmc.set_log_pdf_storage(True)
-    nuts_mcmc.set_parallel(config.parallel)
+    nuts_mcmc.set_parallel(int(config.parallel))
 
     chains = nuts_mcmc.run()  # shape (nwalkers, nsteps, ndim)
     log_pdf = nuts_mcmc.log_pdfs()  # shape (nwalkers, nsteps)
