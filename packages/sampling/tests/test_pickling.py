@@ -18,9 +18,13 @@ def forward_fn(model_params: np.ndarray) -> np.ndarray:
 
 
 def forward_fn_grad(model_params: np.ndarray) -> np.ndarray:
-    """Gradient of the forward function (identity, so gradient is ones)."""
+    """Gradient (Jacobian) of the identity forward function."""
     model_params = np.atleast_2d(model_params)
-    return np.ones_like(model_params)
+    batch_size, ndim = model_params.shape
+    # For an identity forward model with n_obs == ndim, the Jacobian
+    # for each batch element is the identity matrix of shape (n_obs, ndim).
+    jacobian = np.repeat(np.eye(ndim)[None, :, :], batch_size, axis=0)
+    return jacobian
 
 
 def test_priors_are_picklable():
