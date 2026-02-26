@@ -1,17 +1,20 @@
 """Functions for calculating the Savage-Dickey density ratio."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Literal, Self
+from typing import TYPE_CHECKING, Literal, Self
 from warnings import warn
 
-import harmonic as hm
 import numpy as np
-from harmonic.model import FlowModel, RealNVPModel, RQSplineModel
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 from sampling.priors import CompoundPrior
 
 from .marginalisation import marginalise_samples
+
+if TYPE_CHECKING:
+    from harmonic.model import FlowModel
 
 
 class TrainConfig(BaseModel):
@@ -28,13 +31,22 @@ class TrainConfig(BaseModel):
 
 
 class FlowModelConfig(ABC, BaseModel):
-    """Base for model-specific configs exposing the model class."""
+    """Base for model-specific configs exposing the model class.
+
+    The heavy `harmonic` model classes are imported lazily inside `model_cls()`
+    to avoid pulling JAX and friends at module import time.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     @abstractmethod
     def model_cls(self) -> type[FlowModel]:
-        """Return the corresponding model class for this config."""
+        """Return the corresponding flow model class for this config.
+
+        The return type is ``type[FlowModel]``; the concrete ``harmonic`` model
+        classes are imported lazily to avoid requiring heavy ``harmonic`` (and
+        its dependencies) at module import time.
+        """
         ...
 
 
@@ -47,8 +59,13 @@ class RealNVPConfig(FlowModelConfig):
     n_scaled_layers: int = 2
     n_unscaled_layers: int = 4
 
-    def model_cls(self) -> type[RealNVPModel]:
-        """Return the RealNVPModel class."""
+    def model_cls(self) -> type[FlowModel]:
+        """Return the RealNVPModel class.
+
+        Import the class lazily to avoid heavy imports during module import.
+        """
+        from harmonic.model import RealNVPModel
+
         return RealNVPModel
 
 
@@ -63,8 +80,13 @@ class RQSplineConfig(FlowModelConfig):
     hidden_size: Sequence[int] = Field(default=(64, 64))
     spline_range: Sequence[float] = Field(default=(-10.0, 10.0))
 
-    def model_cls(self) -> type[RQSplineModel]:
-        """Return the RQSplineModel class."""
+    def model_cls(self) -> type[FlowModel]:
+        """Return the RQSplineModel class.
+
+        Import the class lazily to avoid heavy imports during module import.
+        """
+        from harmonic.model import RQSplineModel
+
         return RQSplineModel
 
 
@@ -118,7 +140,7 @@ def fit_marginalised_posterior(
     marginal_indices: list[int],
     flow_config: FlowConfig | None = None,
     train_config: TrainConfig | None = None,
-) -> hm.model.FlowModel:
+) -> FlowModel:
     """Fit a flow model to the marginalised posterior samples.
 
     Parameters
@@ -166,7 +188,7 @@ def fit_marginalised_posterior(
 
 
 def sddr(
-    marginalised_posterior: hm.model.FlowModel,
+    marginalised_posterior: FlowModel,
     marginalised_prior: CompoundPrior,
     nu: np.ndarray,
 ) -> float:
