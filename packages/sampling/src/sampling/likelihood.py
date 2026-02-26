@@ -1,11 +1,19 @@
 """Likelihood functions of MCMC sampling."""
 
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 
 import numpy as np
 
 
-class _GradientFull:
+class _GradientCallable(ABC):
+    """Callable class to compute the gradient of the Gaussian likelihood with respect to model parameters.
+
+    This class is used internally by the GaussianLikelihood class to compute the gradient efficiently based on the shape of the inverse covariance matrix.
+
+    This module-level class allows for pickling when using multiprocessing.
+    """
+
     def __init__(
         self,
         forward_fn: Callable[[np.ndarray], np.ndarray],
@@ -23,55 +31,29 @@ class _GradientFull:
         predicted = self.forward_fn(model_params)
         residuals = self.observed_data[None, :] - predicted
         J = np.atleast_3d(self.forward_fn_gradient(model_params))
-        grad_predicted = np.einsum("bni,ij->bnj", J, self.inv_covar)
-        gradient = np.einsum("bnj,bn->bj", grad_predicted, residuals)
-        return gradient.squeeze()
-
-
-class _GradientDiagonal:
-    def __init__(
-        self,
-        forward_fn: Callable[[np.ndarray], np.ndarray],
-        observed_data: np.ndarray,
-        inv_covar: np.ndarray,
-        forward_fn_gradient: Callable[[np.ndarray], np.ndarray],
-    ) -> None:
-        self.forward_fn = forward_fn
-        self.observed_data = observed_data
-        self.inv_covar = inv_covar
-        self.forward_fn_gradient = forward_fn_gradient
-
-    def __call__(self, model_params: np.ndarray) -> np.ndarray:
-        model_params = np.atleast_2d(model_params)
-        predicted = self.forward_fn(model_params)
-        residuals = self.observed_data[None, :] - predicted
-        J = np.atleast_3d(self.forward_fn_gradient(model_params))
-        weighted_residuals = residuals * self.inv_covar
+        weighted_residuals = self._weight_residuals(residuals)
         gradient = np.einsum("bni,bn->bi", J, weighted_residuals)
         return gradient.squeeze()
 
+    @abstractmethod
+    def _weight_residuals(self, residuals: np.ndarray) -> np.ndarray:
+        """Weight the residuals by the inverse covariance matrix."""
+        ...
 
-class _GradientScalar:
-    def __init__(
-        self,
-        forward_fn: Callable[[np.ndarray], np.ndarray],
-        observed_data: np.ndarray,
-        inv_covar: np.ndarray,
-        forward_fn_gradient: Callable[[np.ndarray], np.ndarray],
-    ) -> None:
-        self.forward_fn = forward_fn
-        self.observed_data = observed_data
-        self.inv_covar = inv_covar
-        self.forward_fn_gradient = forward_fn_gradient
 
-    def __call__(self, model_params: np.ndarray) -> np.ndarray:
-        model_params = np.atleast_2d(model_params)
-        predicted = self.forward_fn(model_params)
-        residuals = self.observed_data[None, :] - predicted
-        J = np.atleast_3d(self.forward_fn_gradient(model_params))
-        weighted_residuals = residuals * self.inv_covar.item()
-        gradient = np.einsum("bni,bn->bi", J, weighted_residuals)
-        return gradient.squeeze()
+class _GradientFull(_GradientCallable):
+    def _weight_residuals(self, residuals: np.ndarray) -> np.ndarray:
+        return np.einsum("bi,ij->bj", residuals, self.inv_covar)
+
+
+class _GradientDiagonal(_GradientCallable):
+    def _weight_residuals(self, residuals: np.ndarray) -> np.ndarray:
+        return residuals * self.inv_covar
+
+
+class _GradientScalar(_GradientCallable):
+    def _weight_residuals(self, residuals: np.ndarray) -> np.ndarray:
+        return residuals * self.inv_covar.item()
 
 
 class GaussianLikelihood:
