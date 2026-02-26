@@ -210,8 +210,8 @@ def nuts(
     config : MCMCConfig or None, optional
         MCMC configuration. If None, uses default configuration.
         The following parameters are used: ``nwalkers``, ``nsteps``,
-        ``burn_in``, ``thin``, ``progress``.
-        The following parameters are ignored: ``vectorise``, ``parallel``.
+        ``burn_in``, ``thin``, ``progress``, ``parallel``.
+        The following parameters are ignored: ``vectorise``.
 
     Returns
     -------
