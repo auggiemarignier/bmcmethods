@@ -232,7 +232,7 @@ def nuts(
     nuts_mcmc.set_max_iterations(config.nsteps)
     nuts_mcmc.set_log_to_screen(config.progress)
     nuts_mcmc.set_log_pdf_storage(True)
-    nuts_mcmc.set_parallel(int(config.parallel))
+    nuts_mcmc.set_parallel(config.parallel)
 
     chains = nuts_mcmc.run()  # shape (nwalkers, nsteps, ndim)
     log_pdf = nuts_mcmc.log_pdfs()  # shape (nwalkers, nsteps)
