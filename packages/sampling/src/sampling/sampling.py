@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from multiprocessing import Pool
 
 import numpy as np
@@ -87,7 +88,10 @@ def mcmc(
 
     _pool = DummyPool
     if config.parallel and not config.vectorise:
-        _pool = Pool
+        _pool = partial(
+            Pool,
+            processes=config.parallel if isinstance(config.parallel, int) else None,
+        )
 
     with _pool() as pool:
         sampler = EnsembleSampler(
