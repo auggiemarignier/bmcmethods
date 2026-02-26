@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from multiprocessing import Pool
 
 import numpy as np
@@ -28,8 +29,8 @@ class MCMCConfig:
         Number of burn-in steps to discard.
     vectorise : bool
         Whether to vectorize the likelihood and prior evaluations.
-    parallel : bool
-        Whether to use parallel processing. Ignored if vectorise is True.
+    parallel : bool or int
+        Whether to use parallel processing. If an integer is given, it specifies the number of processes to use.
     progress : bool
         Whether to display a progress bar.
     thin : int
@@ -40,7 +41,7 @@ class MCMCConfig:
     nsteps: int = 1000
     burn_in: int = 200
     vectorise: bool = False
-    parallel: bool = True
+    parallel: bool | int = True
     progress: bool = True
     thin: int = 1
 
@@ -87,7 +88,10 @@ def mcmc(
 
     _pool = DummyPool
     if config.parallel and not config.vectorise:
-        _pool = Pool
+        _pool = partial(
+            Pool,
+            processes=config.parallel if isinstance(config.parallel, int) else None,
+        )
 
     with _pool() as pool:
         sampler = EnsembleSampler(
@@ -164,6 +168,26 @@ def _burn_and_thin_array(chain: np.ndarray, burn_in: int, thin: int) -> np.ndarr
     return processed_chain
 
 
+class PintsPDF(LogPDF):
+    """Wrapper to use our Posterior with pints."""
+
+    def __init__(self, posterior: Posterior, ndim: int):
+        self.posterior = posterior
+        self.ndim = ndim
+
+    def __call__(self, x):
+        """Evaluate the log-posterior at given model parameters."""
+        return self.posterior(x)
+
+    def evaluateS1(self, x):
+        """Evaluate the log-posterior and its gradient at given model parameters."""
+        return self.posterior(x), self.posterior.gradient(x)
+
+    def n_parameters(self):
+        """Return the number of parameters in the model."""
+        return self.ndim
+
+
 def nuts(
     ndim: int,
     likelihood: GaussianLikelihood,
@@ -186,8 +210,8 @@ def nuts(
     config : MCMCConfig or None, optional
         MCMC configuration. If None, uses default configuration.
         The following parameters are used: ``nwalkers``, ``nsteps``,
-        ``burn_in``, ``thin``, ``progress``.
-        The following parameters are ignored: ``vectorise``, ``parallel``.
+        ``burn_in``, ``thin``, ``progress``, ``parallel``.
+        The following parameters are ignored: ``vectorise``.
 
     Returns
     -------
@@ -201,23 +225,14 @@ def nuts(
 
     posterior = Posterior(likelihood, prior, likelihood.gradient, prior.gradient)
 
-    class PintsPDF(LogPDF):
-        def __call__(self, x):
-            return posterior(x)
-
-        def evaluateS1(self, x):
-            return posterior(x), posterior.gradient(x)
-
-        def n_parameters(self):
-            return ndim
-
     initial_pos = prior.sample(config.nwalkers, rng)
     nuts_mcmc = MCMCController(
-        PintsPDF(), config.nwalkers, initial_pos, method=NoUTurnMCMC
+        PintsPDF(posterior, ndim), config.nwalkers, initial_pos, method=NoUTurnMCMC
     )
     nuts_mcmc.set_max_iterations(config.nsteps)
     nuts_mcmc.set_log_to_screen(config.progress)
     nuts_mcmc.set_log_pdf_storage(True)
+    nuts_mcmc.set_parallel(config.parallel)
 
     chains = nuts_mcmc.run()  # shape (nwalkers, nsteps, ndim)
     log_pdf = nuts_mcmc.log_pdfs()  # shape (nwalkers, nsteps)
