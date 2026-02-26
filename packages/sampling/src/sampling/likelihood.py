@@ -30,7 +30,9 @@ class _GradientCallable(ABC):
         model_params = np.atleast_2d(model_params)
         predicted = self.forward_fn(model_params)
         residuals = self.observed_data[None, :] - predicted
-        J = np.atleast_3d(self.forward_fn_gradient(model_params))
+        J = self.forward_fn_gradient(model_params)
+        if J.ndim == 2:
+            J = J[None, :, :]
         weighted_residuals = self._weight_residuals(residuals)
         gradient = np.einsum("bni,bn->bi", J, weighted_residuals)
         return gradient.squeeze()
