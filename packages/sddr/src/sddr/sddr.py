@@ -41,9 +41,11 @@ class FlowModelConfig(ABC, BaseModel):
 
     @abstractmethod
     def model_cls(self) -> type[FlowModel]:
-        """Return the corresponding model class for this config.
+        """Return the corresponding flow model class for this config.
 
-        Return type is `Any` to avoid requiring `harmonic` types at import time.
+        The return type is ``type[FlowModel]``; the concrete ``harmonic`` model
+        classes are imported lazily to avoid requiring heavy ``harmonic`` (and
+        its dependencies) at module import time.
         """
         ...
 
