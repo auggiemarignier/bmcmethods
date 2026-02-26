@@ -190,7 +190,7 @@ class GaussianLikelihood:
 
     def _gradient_not_available(self, model_params: np.ndarray) -> np.ndarray:
         """Raise an error if gradient functions are not provided."""
-        raise ValueError(
+        raise RuntimeError(
             "Gradient function for the forward model must be provided to compute the likelihood gradient."
         )
 

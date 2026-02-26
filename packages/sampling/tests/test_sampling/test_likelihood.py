@@ -121,6 +121,23 @@ def test_gaussian_likelihood_with_gradient_scalar_covariance() -> None:
     gradient = likelihood_fn.gradient(model_params)
     expected_gradient = 2 * covar[0] * (observed_data - 2 * model_params)
     np.testing.assert_allclose(gradient, expected_gradient)
+
+
+def test_gaussian_likelihood_gradient_called_without_forward_fn_gradient() -> None:
+    """Test that calling the gradient method without a forward_fn_gradient raises an error."""
+    observed_data = np.array([1.0, 2.0, 3.0])
+    covar = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+
+    likelihood_fn = GaussianLikelihood(_dummy_forward_fn, observed_data, covar)
+
+    model_params = observed_data / 2.0
+
+    with pytest.raises(
+        RuntimeError, match="Gradient function for the forward model must be provided"
+    ):
+        likelihood_fn.gradient(model_params)
+
+
 def test_invalid_asymmetric_covariance_matrix() -> None:
     """Test that an asymmetrical covariance matrix raises a ValueError."""
     observed_data = np.array([1.0, 2.0])
