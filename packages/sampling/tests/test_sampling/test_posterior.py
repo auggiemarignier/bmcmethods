@@ -168,3 +168,66 @@ def test_marginalise_posterior_samples_with_slice(samples):
     )
 
     assert np.array_equal(marginal_samples, expected_marginal_samples)
+
+
+def test_early_escape_in_posterior():
+    """Test that the posterior returns -inf if the prior is -inf, without evaluating the likelihood."""
+
+    def infinite_prior(params):
+        return -np.inf
+
+    def likelihood(params):
+        raise RuntimeError("Likelihood should not be evaluated when prior is -inf")
+
+    posterior_fn = Posterior(likelihood, infinite_prior)
+
+    params = np.array([1.0, 2.0, -1.5])
+    log_posterior = posterior_fn(params)
+
+    assert log_posterior == -np.inf
+
+
+def test_early_escape_in_posterior_batched():
+    """Test batched early escape: -inf prior entries yield -inf posterior without evaluating their likelihood."""
+
+    def batched_infinite_prior(params: np.ndarray) -> np.ndarray:
+        """Return -inf for models whose first parameter is negative, finite otherwise."""
+        params = np.asarray(params)
+        # Base finite prior (matching the dummy prior style).
+        prior = -np.sum(np.abs(params), axis=-1, dtype=float)
+        # Mark as -inf where first coordinate is negative.
+        mask = params[..., 0] < 0
+        prior[mask] = -np.inf
+        return prior
+
+    def likelihood(params: np.ndarray) -> np.ndarray:
+        """Likelihood must not be evaluated for models with negative first coordinate."""
+        params = np.asarray(params)
+        # In batched mode, Posterior may call the likelihood on a subset of models.
+        # Ensure we never see models that should have -inf prior (first coord < 0).
+        assert not np.any(params[..., 0] < 0), (
+            "Likelihood should not be evaluated for models with -inf prior"
+        )
+        return -0.5 * np.sum(params**2, axis=-1)
+
+    posterior_fn = Posterior(likelihood, batched_infinite_prior)
+
+    models = np.array(
+        [
+            [1.0, 2.0, -1.5],   # finite prior
+            [-1.0, 0.0, 0.5],   # -inf prior (first coordinate negative)
+            [0.5, -0.5, 1.0],   # finite prior
+        ]
+    )
+
+    log_posteriors = posterior_fn(models)
+
+    # Should return one posterior value per model in the batch.
+    assert log_posteriors.shape == (3,)
+
+    # Second model has -inf prior -> posterior must be -inf.
+    assert log_posteriors[1] == -np.inf
+
+    # Other entries must be finite.
+    assert np.isfinite(log_posteriors[0])
+    assert np.isfinite(log_posteriors[2])

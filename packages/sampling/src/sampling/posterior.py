@@ -68,10 +68,31 @@ class Posterior:
             The log-posterior value. Returns a scalar for single models or
             an array of shape (batch_size,) for batched models.
         """
-        log_likelihood = self.likelihood_fn(model_params)
         log_prior = self.prior_fn(model_params)
-        return log_likelihood + log_prior
 
+        # Handle scalar (single-model) and batched cases separately to preserve return shape
+        # and avoid over-broad short-circuiting when only some priors are infinite.
+        log_prior_array = np.asarray(log_prior)
+
+        # Scalar case: preserve existing behaviour
+        if log_prior_array.ndim == 0:
+            if np.isinf(log_prior_array):
+                return -np.inf
+            log_likelihood = self.likelihood_fn(model_params)
+            return log_likelihood + log_prior_array
+
+        # Batched case: compute posterior elementwise, short-circuit only where prior is infinite
+        finite_mask = np.isfinite(log_prior_array)
+        # Initialise all entries to -inf; entries with finite prior will be overwritten
+        log_posterior = np.full_like(log_prior_array, -np.inf, dtype=float)
+
+        if np.any(finite_mask):
+            # Select only the model parameters with finite prior for likelihood evaluation
+            log_likelihood_finite = self.likelihood_fn(model_params[finite_mask])
+            log_likelihood_finite = np.asarray(log_likelihood_finite)
+            log_posterior[finite_mask] = log_likelihood_finite + log_prior_array[finite_mask]
+
+        return log_posterior
     def gradient(self, model_params: np.ndarray) -> np.ndarray:
         """
         Evaluate the gradient of the log-posterior for given model parameters.
