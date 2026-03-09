@@ -68,8 +68,10 @@ class Posterior:
             The log-posterior value. Returns a scalar for single models or
             an array of shape (batch_size,) for batched models.
         """
-        log_likelihood = self.likelihood_fn(model_params)
         log_prior = self.prior_fn(model_params)
+        if np.isinf(log_prior).any():
+            return -np.inf
+        log_likelihood = self.likelihood_fn(model_params)
         return log_likelihood + log_prior
 
     def gradient(self, model_params: np.ndarray) -> np.ndarray:

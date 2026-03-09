@@ -168,3 +168,20 @@ def test_marginalise_posterior_samples_with_slice(samples):
     )
 
     assert np.array_equal(marginal_samples, expected_marginal_samples)
+
+
+def test_early_escape_in_posterior():
+    """Test that the posterior returns -inf if the prior is -inf, without evaluating the likelihood."""
+
+    def infinite_prior(params):
+        return -np.inf
+
+    def likelihood(params):
+        raise RuntimeError("Likelihood should not be evaluated when prior is -inf")
+
+    posterior_fn = Posterior(likelihood, infinite_prior)
+
+    params = np.array([1.0, 2.0, -1.5])
+    log_posterior = posterior_fn(params)
+
+    assert log_posterior == -np.inf
