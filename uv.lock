@@ -2251,6 +2251,15 @@ wheels = [
 ]
 
 [[package]]
+name = "ptemcee"
+version = "1.0.0"
+source = { git = "https://github.com/willvousden/ptemcee.git#c06ffef47eaf9e371a3d629b4d28fb3cecda56b4" }
+dependencies = [
+    { name = "attrs" },
+    { name = "numpy" },
+]
+
+[[package]]
 name = "ptyprocess"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2752,6 +2761,8 @@ dependencies = [
     { name = "emcee" },
     { name = "numpy" },
     { name = "pints" },
+    { name = "ptemcee" },
+    { name = "tqdm" },
 ]
 
 [package.metadata]
@@ -2759,6 +2770,8 @@ requires-dist = [
     { name = "emcee", specifier = ">=3.1.6" },
     { name = "numpy", specifier = ">=2.3.5" },
     { name = "pints", specifier = ">=0.5.1" },
+    { name = "ptemcee", git = "https://github.com/willvousden/ptemcee.git" },
+    { name = "tqdm", specifier = ">=4.67.1" },
 ]
 
 [[package]]

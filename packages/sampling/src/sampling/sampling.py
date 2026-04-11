@@ -8,6 +8,8 @@ from multiprocessing import Pool
 import numpy as np
 from emcee import EnsembleSampler
 from pints import LogPDF, MCMCController, NoUTurnMCMC
+from ptemcee import Sampler
+from tqdm import tqdm
 
 from ._util import DummyPool
 from .likelihood import GaussianLikelihood
@@ -100,6 +102,68 @@ def mcmc(
         sampler.run_mcmc(initial_pos, config.nsteps, progress=config.progress)
 
     return _burn_and_thin_sampler(sampler, config.burn_in, config.thin)
+
+
+def ptmcmc(
+    ndim: int,
+    likelihood: Callable[[np.ndarray], float | np.ndarray],
+    prior: PriorFunction,
+    rng: np.random.Generator,
+    config: MCMCConfig | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Run MCMC sampling using the ensemble sampler.
+
+    Parameters
+    ----------
+    ndim : int
+        Number of dimensions in the parameter space.
+    likelihood : Callable[[ndarray], float | ndarray]
+        Likelihood function that takes model parameters and returns log-likelihood.
+        Should support both scalar (1D) and vectorised (2D batch) inputs if
+        config.vectorise is True.
+    prior : PriorFunction
+        Prior function that takes model parameters and returns log-prior.
+        Should support both scalar (1D) and vectorised (2D batch) inputs if
+        config.vectorise is True.
+    rng : np.random.Generator
+        Random number generator for initializing walkers.
+    config : MCMCConfig or None, optional
+        MCMC configuration. If None, uses default configuration.
+
+    Returns
+    -------
+    samples : ndarray, shape (num_samples, ndim)
+        MCMC samples of the model parameters, after burn-in and thinning.
+    lnprob : ndarray, shape (num_samples,)
+        Log-probabilities of the MCMC samples, after burn-in and thinning.
+    """
+    if config is None:
+        config = MCMCConfig()
+
+    ntemps = 10
+
+    initial_pos = prior.sample(ntemps * config.nwalkers, rng).reshape(
+        (ntemps, config.nwalkers, ndim)
+    )
+
+    if config.parallel:
+        pool = Pool(
+            processes=config.parallel if isinstance(config.parallel, int) else None,
+        )
+    else:
+        pool = DummyPool()
+
+    sampler = Sampler(
+        config.nwalkers,
+        ndim,
+        betas=ntemps,
+        logl=likelihood,
+        logp=prior,
+        _mapper=pool.map,
+    )
+    for _ in tqdm(sampler.sample(initial_pos, config.nsteps), total=config.nsteps):
+        pass
+    return sampler.chain, sampler.logprobability
 
 
 def _burn_and_thin_sampler(
