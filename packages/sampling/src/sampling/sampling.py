@@ -147,21 +147,26 @@ def ptmcmc(
     )
 
     if config.parallel:
-        pool = Pool(
-            processes=config.parallel if isinstance(config.parallel, int) else None,
-        )
+        if isinstance(config.parallel, int):
+            threads = config.parallel
+        else:
+            threads = None  # Use all available cores
     else:
-        pool = DummyPool()
+        threads = 1
 
     sampler = Sampler(
         config.nwalkers,
         ndim,
-        betas=ntemps,
-        logl=likelihood,
-        logp=prior,
-        _mapper=pool.map,
+        likelihood,
+        prior,
+        threads=threads,
+        ntemps=ntemps,
     )
-    for _ in tqdm(sampler.sample(initial_pos, config.nsteps), total=config.nsteps):
+    for _ in tqdm(
+        sampler.sample(initial_pos, config.nsteps),
+        total=config.nsteps,
+        disable=not config.progress,
+    ):
         pass
     return sampler.chain, sampler.logprobability
 
