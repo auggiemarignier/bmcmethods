@@ -7,7 +7,7 @@ behaviour, and error on unimplemented prior initialisation.
 import numpy as np
 from sampling.likelihood import GaussianLikelihood
 from sampling.priors import UniformPrior
-from sampling.sampling import MCMCConfig, mcmc, nuts
+from sampling.sampling import MCMCConfig, mcmc, nuts, ptmcmc
 
 
 def likelihood_fn(theta: np.ndarray) -> np.ndarray:
@@ -91,6 +91,20 @@ def test_mcmc_parallel_flag(rng: np.random.Generator) -> None:
     expected_n = (cfg.nsteps - cfg.burn_in) * cfg.nwalkers
     assert samples.shape == (expected_n, ndim)
     assert lnprob.shape == (expected_n,)
+
+
+def test_ptmcmc_parallel_flag(rng: np.random.Generator) -> None:
+    """Run ptmcmc with parallel=True to ensure code path executes without error."""
+
+    prior = LogPrior()
+    ndim = prior.n
+    # ptemcee requires an even number of walkers and >= 2*ndim
+    cfg = MCMCConfig(nwalkers=2 * ndim, nsteps=5, burn_in=1, thin=1, parallel=True)
+    # We only check that the function runs and returns non-empty outputs
+    chain, logprob = ptmcmc(ndim, likelihood_fn, prior, rng, cfg)
+
+    assert chain is not None
+    assert logprob is not None
 
 
 def test_mcmc_default_config(
