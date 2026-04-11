@@ -132,10 +132,10 @@ def ptmcmc(
 
     Returns
     -------
-    samples : ndarray, shape (num_samples, ndim)
-        MCMC samples of the model parameters, after burn-in and thinning.
-    lnprob : ndarray, shape (num_samples,)
-        Log-probabilities of the MCMC samples, after burn-in and thinning.
+    samples : ndarray, shape (ntemps (10), nwalkers, num_samples, ndim)
+        MCMC samples of the model parameters.
+    lnprob : ndarray, shape (ntemps (10), nwalkers, num_samples)
+        Log-probabilities of the MCMC samples.
     """
     if config is None:
         config = MCMCConfig()
