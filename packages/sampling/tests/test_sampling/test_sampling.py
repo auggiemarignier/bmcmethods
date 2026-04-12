@@ -4,7 +4,7 @@ Focus: shape handling (per-walker burn-in and thinning), parallel flag
 behaviour, and error on unimplemented prior initialisation.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 from sampling.likelihood import GaussianLikelihood
