@@ -2,6 +2,8 @@
 
 import numpy as np
 import pytest
+from sampling import sampling
+from sampling._util import DummyPool
 from sampling.likelihood import GaussianLikelihood
 from sampling.likelihood._base import LikelihoodBase
 from sampling.priors import UniformPrior
@@ -30,8 +32,8 @@ class DummyPrior:
         self.n = n
         self.offset = offset
 
-    def __call__(self, model_params: np.ndarray) -> float:
-        return float(np.sum(model_params) + self.offset)
+    def __call__(self, model_params: np.ndarray) -> np.ndarray:
+        return np.sum(model_params) + self.offset
 
     def gradient(self, model_params: np.ndarray) -> np.ndarray:
         return np.zeros_like(model_params)
@@ -48,6 +50,71 @@ def likelihood() -> DummyLikelihood:
 @pytest.fixture
 def prior() -> DummyPrior:
     return DummyPrior()
+
+
+def test_make_pool_serial_calls_init_worker(monkeypatch):
+    called = {}
+
+    def fake_init_worker(likelihood_cls, likelihood_state, prior):
+        called["args"] = (likelihood_cls, likelihood_state, prior)
+
+    monkeypatch.setattr(sampling, "init_worker", fake_init_worker)
+
+    config = MCMCConfig(parallel=False)
+    pool = sampling.make_pool(
+        config,
+        DummyLikelihood,
+        1,
+        DummyPrior(),
+    )
+
+    assert isinstance(pool, DummyPool)
+    assert called["args"][0] is DummyLikelihood
+    assert called["args"][1] == 1
+    assert isinstance(called["args"][2], DummyPrior)
+
+
+class FakePool:
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+
+def test_make_pool_parallel_constructs_pool(monkeypatch):
+    captured = {}
+
+    def fake_pool(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return FakePool(*args, **kwargs)
+
+    monkeypatch.setattr(sampling, "Pool", fake_pool)
+    monkeypatch.setattr(sampling, "init_worker", lambda *a, **k: None)
+
+    config = MCMCConfig(parallel=4)
+    pool = sampling.make_pool(
+        config,
+        DummyLikelihood,
+        1,
+        DummyPrior(),
+    )
+
+    assert isinstance(pool, FakePool)
+    assert captured["kwargs"]["processes"] == 4
+    assert captured["kwargs"]["initializer"] is sampling.init_worker
+    assert captured["kwargs"]["initargs"][0] is DummyLikelihood
+    assert captured["kwargs"]["initargs"][1] == 1
+
+
+def test_make_pool_true_uses_cpu_count(monkeypatch):
+    monkeypatch.setattr(sampling, "Pool", lambda **kwargs: kwargs)
+    monkeypatch.setattr(sampling, "init_worker", lambda *a, **k: None)
+    monkeypatch.setattr(sampling.os, "cpu_count", lambda: 8)
+
+    config = MCMCConfig(parallel=True)
+    pool = sampling.make_pool(config, DummyLikelihood, {"x": 1}, DummyPrior())
+
+    assert pool["processes"] == 8
 
 
 def test_mcmc_shapes_no_thin(
