@@ -124,7 +124,7 @@ def test_mcmc_shapes_no_thin(
 ) -> None:
     """Validate returned sample and log-probability shapes."""
     ndim = prior.n
-    cfg = MCMCConfig(nwalkers=6, nsteps=7, burn_in=2, thin=1, parallel=False)
+    cfg = MCMCConfig(nwalkers=6, nsteps=7, parallel=False)
     samples, lnprob = mcmc(ndim, likelihood, prior, rng, cfg)
     assert samples.shape == (cfg.nsteps, cfg.nwalkers, ndim)
     assert lnprob.shape == (cfg.nsteps, cfg.nwalkers)
@@ -140,7 +140,7 @@ def test_mcmc_parallel_flag(
     """Run with parallel=True to ensure code path executes without error."""
 
     ndim = prior.n
-    cfg = MCMCConfig(nwalkers=4, nsteps=5, burn_in=1, thin=1, parallel=True)
+    cfg = MCMCConfig(nwalkers=4, nsteps=5, parallel=True)
     samples, lnprob = mcmc(ndim, likelihood, prior, rng, cfg)
     assert samples.shape == (cfg.nsteps, cfg.nwalkers, ndim)
     assert lnprob.shape == (cfg.nsteps, cfg.nwalkers)
@@ -155,7 +155,7 @@ def test_ptmcmc_parallel_flag(
 
     ndim = prior.n
     # ptemcee requires an even number of walkers and >= 2*ndim
-    cfg = MCMCConfig(nwalkers=2 * ndim, nsteps=5, burn_in=1, thin=1, parallel=True)
+    cfg = MCMCConfig(nwalkers=2 * ndim, nsteps=5, parallel=True)
     # We only check that the function runs and returns non-empty outputs
     chain, logprob = ptmcmc(ndim, likelihood, prior, rng, cfg)
     assert chain.shape == (10, cfg.nsteps, cfg.nwalkers, ndim)
