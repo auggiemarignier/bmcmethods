@@ -2,9 +2,7 @@
 
 import os
 import warnings
-from collections.abc import Callable
 from dataclasses import dataclass
-from functools import partial
 from multiprocessing import Pool
 
 import numpy as np
@@ -13,8 +11,11 @@ from pints import LogPDF, MCMCController, NoUTurnMCMC
 from ptemcee import Sampler
 from tqdm import tqdm
 
+from sampling._worker import init_worker, logl, logp
+from sampling.likelihood._base import LikelihoodBase
+
 from ._util import DummyPool
-from .likelihood.gaussian import GaussianLikelihood
+from .likelihood import GaussianLikelihood
 from .posterior import Posterior
 from .priors import PriorFunction
 
@@ -47,9 +48,42 @@ class MCMCConfig:
     thin: int = 1
 
 
-def mcmc(
+def make_pool[S](
+    config: MCMCConfig,
+    likelihood_cls: type[LikelihoodBase[S]],
+    likelihood_state: S,
+    prior: PriorFunction,
+):
+    """Create a pool object, initialising each worker with heavy read-only data to avoid large copies at each iteration."""
+    if not config.parallel:
+        return DummyPool()
+
+    if isinstance(config.parallel, bool):
+        processes = os.cpu_count()
+        if processes is None:
+            warnings.warn(
+                "Could not determine CPU count; falling back to 1 process.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            processes = 1
+    elif isinstance(config.parallel, int):
+        processes = config.parallel
+    else:
+        raise TypeError("Invalid type for config.parallel. Must be bool or int.")
+
+    pool = Pool(
+        processes=processes,
+        initializer=init_worker,
+        initargs=(likelihood_cls, likelihood_state, prior),
+    )
+
+    return pool
+
+
+def mcmc[S](
     ndim: int,
-    likelihood: Callable[[np.ndarray], float | np.ndarray],
+    likelihood: LikelihoodBase[S],
     prior: PriorFunction,
     rng: np.random.Generator,
     config: MCMCConfig | None = None,
@@ -83,35 +117,19 @@ def mcmc(
 
     initial_pos = prior.sample(config.nwalkers, rng)
 
-    posterior = Posterior(likelihood, prior)
+    pool_cm = make_pool(config, likelihood.__class__, likelihood.state, prior)
+    posterior = Posterior(logl, logp)
 
-    _pool = DummyPool
-    if config.parallel:
-        if isinstance(config.parallel, bool):
-            processes = os.cpu_count()
-            if processes is None:
-                warnings.warn(
-                    "Could not determine CPU count; falling back to 1 process.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-                processes = 1
-        elif isinstance(config.parallel, int):
-            processes = config.parallel
-        else:
-            raise ValueError("Invalid value for config.parallel. Must be bool or int.")
-        _pool = partial(Pool, processes=processes)
-
-    with _pool() as pool:
+    with pool_cm as pool:
         sampler = EnsembleSampler(config.nwalkers, ndim, posterior, pool=pool)
         sampler.run_mcmc(initial_pos, config.nsteps, progress=config.progress)
 
     return _burn_and_thin_sampler(sampler, config.burn_in, config.thin)
 
 
-def ptmcmc(
+def ptmcmc[S](
     ndim: int,
-    likelihood: Callable[[np.ndarray], float | np.ndarray],
+    likelihood: LikelihoodBase[S],
     prior: PriorFunction,
     rng: np.random.Generator,
     config: MCMCConfig | None = None,
@@ -149,37 +167,24 @@ def ptmcmc(
         (ntemps, config.nwalkers, ndim)
     )
 
-    if config.parallel:
-        if isinstance(config.parallel, bool):
-            threads = os.cpu_count()
-            if threads is None:
-                warnings.warn(
-                    "Could not determine CPU count; falling back to 1 thread.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-                threads = 1
-        elif isinstance(config.parallel, int):
-            threads = config.parallel
-        else:
-            raise ValueError("Invalid value for config.parallel. Must be bool or int.")
-    else:
-        threads = 1
+    pool_cm = make_pool(config, likelihood.__class__, likelihood.state, prior)
 
-    sampler = Sampler(
-        config.nwalkers,
-        ndim,
-        likelihood,
-        prior,
-        threads=threads,
-        ntemps=ntemps,
-    )
-    for _ in tqdm(
-        sampler.sample(initial_pos, config.nsteps),
-        total=config.nsteps,
-        disable=not config.progress,
-    ):
-        pass
+    with pool_cm as pool:
+        sampler = Sampler(
+            config.nwalkers,
+            ndim,
+            likelihood,
+            prior,
+            pool=pool,
+            ntemps=ntemps,
+        )
+        for _ in tqdm(
+            sampler.sample(initial_pos, config.nsteps),
+            total=config.nsteps,
+            disable=not config.progress,
+        ):
+            pass
+
     return sampler.chain, sampler.logprobability
 
 
@@ -301,6 +306,8 @@ def nuts(
     lnprob : ndarray, shape (num_samples,)
         Log-probabilities of the MCMC samples, after burn-in and thinning.
     """
+    # TODO: Sort out how the gradients data gets passed to the workers
+
     if config is None:
         config = MCMCConfig()
 
