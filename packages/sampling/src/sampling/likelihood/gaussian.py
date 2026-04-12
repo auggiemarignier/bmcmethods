@@ -181,7 +181,7 @@ class GaussianLikelihood(LikelihoodBase):
         return grad_gaussian_loglikelihood(model_params, self.state)
 
     @classmethod
-    def from_state(cls, state: GaussianLikelihoodState) -> LikelihoodBase:
+    def from_state(cls, state: GaussianLikelihoodState) -> "GaussianLikelihood":
         """Initialse from a state object.
 
         Usefull for initialising in multiple workers.

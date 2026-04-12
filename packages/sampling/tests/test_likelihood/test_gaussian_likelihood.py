@@ -87,6 +87,18 @@ def test_grad_gaussian_loglikelihood(state: GaussianLikelihoodState) -> None:
     np.testing.assert_allclose(gradient, expected_gradient)
 
 
+class TestGaussianLikelihood:
+    def test_from_state(self, state: GaussianLikelihoodState) -> None:
+        obj = GaussianLikelihood.from_state(state)
+
+        assert obj.forward_fn is state.forward_fn
+        assert obj.forward_fn_gradient is state.forward_fn_gradient
+
+        np.testing.assert_array_equal(obj.state.observed_data, state.observed_data)
+        np.testing.assert_array_equal(obj.state.inv_covar, state.inv_covar)
+        assert obj.state.covar_kind == state.covar_kind
+
+
 def test_gaussian_likelihood_with_gradient_diagonal_covariance() -> None:
     """Test Gaussian likelihood gradient with a diagonal inverse covariance."""
     observed_data = np.array([1.0, 2.0, 3.0])
