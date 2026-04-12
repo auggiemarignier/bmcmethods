@@ -4,7 +4,16 @@ import pickle
 
 import numpy as np
 import pytest
-from sampling.likelihood import GaussianLikelihood, _validate_covariance_matrix
+from sampling.likelihood import (
+    GaussianLikelihood,
+    GaussianLikelihoodState,
+    _exponential_term_diagonal,
+    _exponential_term_full,
+    _exponential_term_scalar,
+    _validate_covariance_matrix,
+    gaussian_log_likelihood,
+    grad_gaussian_loglikelihood,
+)
 
 
 def _dummy_forward_fn(model_params: np.ndarray) -> np.ndarray:
@@ -23,18 +32,28 @@ def _dummy_forward_fn_gradient(model_params: np.ndarray) -> np.ndarray:
         )
 
 
-def test_gaussian_likelihood_factory() -> None:
-    """Test the Gaussian likelihood factory."""
+@pytest.mark.parametrize(
+    "inv_covar",
+    [
+        np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
+        np.array([1.0, 1.0, 1.0]),
+        np.array([1.0]),
+    ],
+    ids=["full_covariance", "diagonal_covariance", "scalar_covariance"],
+)
+def test_gaussian_log_likelihood_perfect_match(inv_covar: np.ndarray) -> None:
+    """Test the Gaussian log likelihood function."""
     observed_data = np.array([1.0, 2.0, 3.0])
-    covar = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
 
-    likelihood_fn = GaussianLikelihood(_dummy_forward_fn, observed_data, covar)
+    state = GaussianLikelihoodState(
+        observed_data=observed_data,
+        inv_covar=inv_covar,
+    )
 
     model_params = observed_data / 2.0  # So that predicted data matches observed data
-    log_likelihood = likelihood_fn(model_params)
+    log_likelihood = gaussian_log_likelihood(model_params, _dummy_forward_fn, state)
 
     expected_log_likelihood = 0.0  # Perfect match
-
     assert np.isclose(log_likelihood, expected_log_likelihood)
 
 
@@ -47,29 +66,53 @@ def test_gaussian_likelihood_factory() -> None:
     ],
     ids=["full_covariance", "diagonal_covariance", "scalar_covariance"],
 )
-def test_gaussian_likelihood_with_gradient(inv_covar) -> None:
-    """Test the Gaussian likelihood factory with a gradient."""
+def test_gaussian_log_likelihood_non_perfect_match(inv_covar: np.ndarray) -> None:
+    """Test the Gaussian log likelihood function."""
     observed_data = np.array([1.0, 2.0, 3.0])
 
-    likelihood_fn = GaussianLikelihood(
-        _dummy_forward_fn,
-        observed_data,
-        inv_covar,
-        forward_fn_gradient=_dummy_forward_fn_gradient,
+    state = GaussianLikelihoodState(
+        observed_data=observed_data,
+        inv_covar=inv_covar,
     )
 
+    model_params = observed_data
+    log_likelihood = gaussian_log_likelihood(model_params, _dummy_forward_fn, state)
+
+    expected_log_likelihood = -0.5 * np.sum(
+        observed_data**2
+    )  # For this particular forward function
+    assert np.isclose(log_likelihood, expected_log_likelihood)
+
+
+@pytest.mark.parametrize(
+    "inv_covar",
+    [
+        np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
+        np.array([1.0, 1.0, 1.0]),
+        np.array([1.0]),
+    ],
+    ids=["full_covariance", "diagonal_covariance", "scalar_covariance"],
+)
+def test_grad_gaussian_loglikelihood(inv_covar: np.ndarray) -> None:
+    """Test the Gaussian loglikelihood gradient function."""
+    observed_data = np.array([1.0, 2.0, 3.0])
+    state = GaussianLikelihoodState(observed_data, inv_covar)
+
     model_params = observed_data / 2.0
-    gradient = likelihood_fn.gradient(model_params)
+    gradient = grad_gaussian_loglikelihood(
+        model_params, _dummy_forward_fn, _dummy_forward_fn_gradient, state
+    )
 
     expected_gradient = np.array(
         [0.0, 0.0, 0.0]
     )  # Gradient should be zero at the maximum likelihood point
-
     np.testing.assert_allclose(gradient, expected_gradient)
 
     model_params = observed_data
-    gradient = likelihood_fn.gradient(model_params)
-    expected_gradient = 2 * (observed_data - 2 * model_params)  # From the formula
+    gradient = grad_gaussian_loglikelihood(
+        model_params, _dummy_forward_fn, _dummy_forward_fn_gradient, state
+    )
+    expected_gradient = 2 * (observed_data - 2 * model_params)
     np.testing.assert_allclose(gradient, expected_gradient)
 
 
@@ -303,65 +346,25 @@ def test_validate_covariance_matrix_full_not_pos_semidefinite():
 
 
 class TestExponentialTermFunctions:
-    class Dummy(GaussianLikelihood):
-        def __init__(self, inv_covar):
-            self.inv_covar = inv_covar
-
     residual = np.array([[1.0, 2.0], [3.0, 4.0]])  # shape (batch=2, n=2)
 
     def test_exponential_term_full(self):
         inv_covar = np.array([[2.0, 1.0], [1.0, 1.0]])
-        dummy = self.Dummy(inv_covar)
         expected = -0.5 * np.array([10.0, 58.0])
-        result = dummy._exponential_term_full(self.residual)
+        result = _exponential_term_full(inv_covar, self.residual)
         np.testing.assert_allclose(result, expected)
 
     def test_exponential_term_diagonal(self):
         inv_covar = np.array([2.0, 1.0])
-        dummy = self.Dummy(inv_covar)
         expected = -0.5 * np.array([6.0, 34.0])
-        result = dummy._exponential_term_diagonal(self.residual)
+        result = _exponential_term_diagonal(inv_covar, self.residual)
         np.testing.assert_allclose(result, expected)
 
     def test_exponential_term_scalar(self):
         inv_covar = np.array([2.0])
-        dummy = self.Dummy(inv_covar)
         expected = -0.5 * np.array([10.0, 50.0])
-        result = dummy._exponential_term_scalar(self.residual)
+        result = _exponential_term_scalar(inv_covar, self.residual)
         np.testing.assert_allclose(result, expected)
-
-
-class TestChooseExponentialTermFunction:
-    class Dummy(GaussianLikelihood):
-        def __init__(self, inv_covar):
-            self.inv_covar = inv_covar
-
-        def _exponential_term_full(self, residual: np.ndarray):
-            return "full"
-
-        def _exponential_term_diagonal(self, residual: np.ndarray):
-            return "diag"
-
-        def _exponential_term_scalar(self, residual: np.ndarray):
-            return "scalar"
-
-    def test_choose_exponential_term_function_full(self):
-        inv_covar = np.eye(2)
-        dummy = self.Dummy(inv_covar)
-        fn = dummy._choose_exponential_term_function()
-        assert fn(np.zeros(2)) == "full"
-
-    def test_choose_exponential_term_function_diagonal(self):
-        inv_covar = np.array([1.0, 2.0])
-        dummy = self.Dummy(inv_covar)
-        fn = dummy._choose_exponential_term_function()
-        assert fn(np.zeros(2)) == "diag"
-
-    def test_choose_exponential_term_function_scalar(self):
-        inv_covar = np.array([1.0])
-        dummy = self.Dummy(inv_covar)
-        fn = dummy._choose_exponential_term_function()
-        assert fn(np.zeros(1)) == "scalar"
 
 
 class TestBatchedVsScalar:
