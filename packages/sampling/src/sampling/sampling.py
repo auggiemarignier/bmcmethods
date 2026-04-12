@@ -1,6 +1,7 @@
 """Sampling using emcee."""
 
 import os
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -149,7 +150,14 @@ def ptmcmc(
 
     if config.parallel:
         if isinstance(config.parallel, bool):
-            threads = os.cpu_count()  # Use all available cores
+            threads = os.cpu_count()
+            if threads is None:
+                warnings.warn(
+                    "Could not determine CPU count; falling back to 1 thread.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                threads = 1
         elif isinstance(config.parallel, int):
             threads = config.parallel
         else:
