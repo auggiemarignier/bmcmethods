@@ -56,6 +56,7 @@ def make_pool[S](
 ):
     """Create a pool object, initialising each worker with heavy read-only data to avoid large copies at each iteration."""
     if not config.parallel:
+        init_worker(likelihood_cls, likelihood_state, prior)
         return DummyPool()
 
     if isinstance(config.parallel, bool):
@@ -107,10 +108,10 @@ def mcmc[S](
 
     Returns
     -------
-    samples : ndarray, shape (num_samples, ndim)
-        MCMC samples of the model parameters, after burn-in and thinning.
-    lnprob : ndarray, shape (num_samples,)
-        Log-probabilities of the MCMC samples, after burn-in and thinning.
+    samples : ndarray, shape (nsteps, nwalkers, ndim)
+        MCMC samples of the model parameters.
+    lnprob : ndarray, shape (nsteps, nwalkers,)
+        Log-probabilities of the MCMC samples.
     """
     if config is None:
         config = MCMCConfig()
@@ -124,7 +125,7 @@ def mcmc[S](
         sampler = EnsembleSampler(config.nwalkers, ndim, posterior, pool=pool)
         sampler.run_mcmc(initial_pos, config.nsteps, progress=config.progress)
 
-    return _burn_and_thin_sampler(sampler, config.burn_in, config.thin)
+    return sampler.get_chain(), sampler.get_log_prob()
 
 
 def ptmcmc[S](
@@ -153,9 +154,9 @@ def ptmcmc[S](
 
     Returns
     -------
-    samples : ndarray, shape (ntemps (10), nwalkers, num_samples, ndim)
+    samples : ndarray, shape (ntemps (10), nsteps, nwalkers, ndim)
         MCMC samples of the model parameters.
-    lnprob : ndarray, shape (ntemps (10), nwalkers, num_samples)
+    lnprob : ndarray, shape (ntemps (10), nsteps, nwalkers)
         Log-probabilities of the MCMC samples.
     """
     if config is None:
@@ -185,7 +186,7 @@ def ptmcmc[S](
         ):
             pass
 
-    return sampler.chain, sampler.logprobability
+    return sampler.chain.swapaxes(1, 2), sampler.logprobability.swapaxes(1, 2)
 
 
 def _burn_and_thin_sampler(
@@ -301,9 +302,9 @@ def nuts(
 
     Returns
     -------
-    samples : ndarray, shape (num_samples, ndim)
+    samples : ndarray, shape (nsteps, nwalkers, ndim)
         MCMC samples of the model parameters, after burn-in and thinning.
-    lnprob : ndarray, shape (num_samples,)
+    lnprob : ndarray, shape (nsteps, nwalkers,)
         Log-probabilities of the MCMC samples, after burn-in and thinning.
     """
     # TODO: Sort out how the gradients data gets passed to the workers
@@ -322,18 +323,7 @@ def nuts(
     nuts_mcmc.set_log_pdf_storage(True)
     nuts_mcmc.set_parallel(config.parallel)
 
-    chains = nuts_mcmc.run()  # shape (nwalkers, nsteps, ndim)
-    log_pdf = nuts_mcmc.log_pdfs()  # shape (nwalkers, nsteps)
+    chains = nuts_mcmc.run()
+    log_pdf = nuts_mcmc.log_pdfs()
 
-    # Transpose to (nsteps, nwalkers, ndim) and (nsteps, nwalkers)
-    chains = chains.transpose(1, 0, 2)
-    log_pdf = log_pdf.transpose(1, 0)
-
-    # Apply burn-in and thinning
-    chains = _burn_and_thin_array(chains, config.burn_in, config.thin)
-    log_pdf = _burn_and_thin_array(log_pdf, config.burn_in, config.thin)
-
-    samples = np.ascontiguousarray(chains.reshape(-1, ndim))
-    lnprob = np.ascontiguousarray(log_pdf.reshape(-1))
-
-    return samples, lnprob
+    return chains.swapaxes(0, 1), log_pdf.swapaxes(0, 1)
