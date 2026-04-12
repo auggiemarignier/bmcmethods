@@ -182,9 +182,9 @@ class GaussianLikelihood(LikelihoodBase):
 
     @classmethod
     def from_state(cls, state: GaussianLikelihoodState) -> "GaussianLikelihood":
-        """Initialse from a state object.
+        """Initialise from a state object.
 
-        Usefull for initialising in multiple workers.
+        Useful for initialising in multiple workers.
         """
         return cls(
             state.forward_fn,
