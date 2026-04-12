@@ -1,61 +1,82 @@
 """Likelihood functions of MCMC sampling."""
 
-from abc import ABC, abstractmethod
 from collections.abc import Callable
+from dataclasses import dataclass, field
+from enum import StrEnum, auto
 
 import numpy as np
 
 
-class _GradientCallable(ABC):
-    """Callable class to compute the gradient of the Gaussian likelihood with respect to model parameters.
+class CovarianceKind(StrEnum):
+    """Enumeration for the type of covariance matrix used in the Gaussian likelihood."""
 
-    This class is used internally by the GaussianLikelihood class to compute the gradient efficiently based on the shape of the inverse covariance matrix.
-
-    This module-level class allows for pickling when using multiprocessing.
-    """
-
-    def __init__(
-        self,
-        forward_fn: Callable[[np.ndarray], np.ndarray],
-        observed_data: np.ndarray,
-        inv_covar: np.ndarray,
-        forward_fn_gradient: Callable[[np.ndarray], np.ndarray],
-    ) -> None:
-        self.forward_fn = forward_fn
-        self.observed_data = observed_data
-        self.inv_covar = inv_covar
-        self.forward_fn_gradient = forward_fn_gradient
-
-    def __call__(self, model_params: np.ndarray) -> np.ndarray:
-        model_params = np.atleast_2d(model_params)
-        predicted = self.forward_fn(model_params)
-        residuals = self.observed_data[None, :] - predicted
-        J = self.forward_fn_gradient(model_params)
-        if J.ndim == 2:
-            J = J[None, :, :]
-        weighted_residuals = self._weight_residuals(residuals)
-        gradient = np.einsum("bni,bn->bi", J, weighted_residuals)
-        return gradient.squeeze()
-
-    @abstractmethod
-    def _weight_residuals(self, residuals: np.ndarray) -> np.ndarray:
-        """Weight the residuals by the inverse covariance matrix."""
-        ...
+    FULL = auto()
+    DIAG = auto()
+    SCALAR = auto()
 
 
-class _GradientFull(_GradientCallable):
-    def _weight_residuals(self, residuals: np.ndarray) -> np.ndarray:
-        return np.einsum("bi,ij->bj", residuals, self.inv_covar)
+@dataclass(frozen=True)
+class GaussianLikelihoodState:
+    """Container for the state of the Gaussian likelihood, used for pickling when using multiprocessing."""
+
+    observed_data: np.ndarray
+    inv_covar: np.ndarray
+    covar_kind: CovarianceKind = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Determine the kind of covariance matrix based on the shape of the inverse covariance."""
+        if self.inv_covar.ndim == 2:
+            kind = CovarianceKind.FULL
+        elif self.inv_covar.ndim == 1 and self.inv_covar.size > 1:
+            kind = CovarianceKind.DIAG
+        else:
+            kind = CovarianceKind.SCALAR
+        object.__setattr__(self, "covar_kind", kind)
 
 
-class _GradientDiagonal(_GradientCallable):
-    def _weight_residuals(self, residuals: np.ndarray) -> np.ndarray:
-        return residuals * self.inv_covar
+def gaussian_log_likelihood(
+    model_params: np.ndarray,
+    forward_fn: Callable[[np.ndarray], np.ndarray],
+    state: GaussianLikelihoodState,
+) -> np.ndarray:
+    """Compute the Gaussian log-likelihood for given model parameters."""
+    model_params = np.atleast_2d(model_params)
+    predicted = forward_fn(model_params)
+    residuals = state.observed_data[None, :] - predicted
+
+    if state.covar_kind == CovarianceKind.FULL:
+        out = _exponential_term_full(state.inv_covar, residuals)
+    elif state.covar_kind == CovarianceKind.DIAG:
+        out = _exponential_term_diagonal(state.inv_covar, residuals)
+    else:
+        out = _exponential_term_scalar(state.inv_covar, residuals)
+
+    return out.squeeze()
 
 
-class _GradientScalar(_GradientCallable):
-    def _weight_residuals(self, residuals: np.ndarray) -> np.ndarray:
-        return residuals * self.inv_covar.item()
+def grad_gaussian_loglikelihood(
+    model_params: np.ndarray,
+    forward_fn: Callable[[np.ndarray], np.ndarray],
+    forward_fn_gradient: Callable[[np.ndarray], np.ndarray],
+    state: GaussianLikelihoodState,
+) -> np.ndarray:
+    """Compute the gradient of the Gaussian log-likelihood with respect to model parameters."""
+    model_params = np.atleast_2d(model_params)
+    predicted = forward_fn(model_params)
+    residuals = state.observed_data[None, :] - predicted
+    J = forward_fn_gradient(model_params)
+    if J.ndim == 2:
+        J = J[None, :, :]
+
+    if state.covar_kind == CovarianceKind.FULL:
+        weighted_residuals = np.einsum("bi,ij->bj", residuals, state.inv_covar)
+    elif state.covar_kind == CovarianceKind.DIAG:
+        weighted_residuals = residuals * state.inv_covar
+    else:
+        weighted_residuals = residuals * state.inv_covar.item()
+
+    gradient = np.einsum("bni,bn->bi", J, weighted_residuals)
+    return gradient.squeeze()
 
 
 class GaussianLikelihood:
@@ -70,9 +91,9 @@ class GaussianLikelihood:
         forward_fn: Callable[[np.ndarray], np.ndarray],
         observed_data: np.ndarray,
         inv_covar: float | np.ndarray,
+        forward_fn_gradient: None | Callable[[np.ndarray], np.ndarray] = None,
         validate_covariance: bool = True,
         example_model: None | np.ndarray = None,
-        forward_fn_gradient: None | Callable[[np.ndarray], np.ndarray] = None,
     ) -> None:
         """
         Initialise the Gaussian likelihood.
@@ -100,22 +121,19 @@ class GaussianLikelihood:
             If the inverse covariance matrix is not symmetric or not positive semidefinite.
         """
         _validate_data_vector(observed_data)
+        inv_covar = np.array(inv_covar)
         if validate_covariance:
-            _validate_covariance_matrix(np.array(inv_covar), observed_data.size)
+            _validate_covariance_matrix(inv_covar, observed_data.size)
         if example_model is not None:
             _validate_forward_function(forward_fn, example_model, observed_data.size)
 
         self.forward_fn = forward_fn
-        self.observed_data = observed_data
-        self.inv_covar = np.array(inv_covar)
-        self._exp_term_fn = self._choose_exponential_term_function()
+        self.forward_fn_gradient = forward_fn_gradient
 
-        # Setting the gradient function based on the availability of forward function gradient
-        # Doing it here avoids checking for gradients every time the gradient method is called, improving efficiency
-        if forward_fn_gradient is not None:
-            self.gradient_fn = self._choose_gradient_function(forward_fn_gradient)
-        else:
-            self.gradient_fn = self._gradient_not_available
+        self.state = GaussianLikelihoodState(
+            observed_data=observed_data,
+            inv_covar=inv_covar,
+        )
 
     def __call__(self, model_params: np.ndarray) -> np.ndarray:
         """
@@ -131,12 +149,7 @@ class GaussianLikelihood:
         log_likelihood : ndarray
             The log-likelihood value(s).
         """
-        model_params = np.atleast_2d(model_params)  # Ensure shape is (batch, ndim)
-        predicted = self.forward_fn(model_params)
-        residuals = self.observed_data[None, :] - predicted
-        return self._exp_term_fn(
-            self.inv_covar, residuals
-        ).squeeze()  # Return scalar if input was 1D
+        return gaussian_log_likelihood(model_params, self.forward_fn, self.state)
 
     def gradient(self, model_params: np.ndarray) -> np.ndarray:
         """
@@ -152,71 +165,13 @@ class GaussianLikelihood:
         gradient : ndarray
             The gradient of the log-likelihood with respect to model parameters.
         """
-        return self.gradient_fn(model_params)
-
-    def _choose_gradient_function(
-        self, forward_fn_gradient: Callable[[np.ndarray], np.ndarray]
-    ) -> Callable[[np.ndarray], np.ndarray]:
-        """
-        Choose the appropriate gradient computation function based on the shape of the inverse covariance matrix.
-
-        Parameters
-        ----------
-        forward_fn_gradient : Callable[[np.ndarray], np.ndarray]
-            Gradient of the forward function with respect to model parameters.
-
-        Returns
-        -------
-        gradient_fn : Callable[[ndarray], ndarray]
-            Function that computes the gradient of the log-likelihood.
-        """
-        if self.inv_covar.ndim == 2:
-            return _GradientFull(
-                forward_fn=self.forward_fn,
-                observed_data=self.observed_data,
-                inv_covar=self.inv_covar,
-                forward_fn_gradient=forward_fn_gradient,
+        if self.forward_fn_gradient is None:
+            raise RuntimeError(
+                "Gradient function for the forward model must be provided to compute the likelihood gradient."
             )
-        elif self.inv_covar.ndim == 1 and self.inv_covar.size > 1:
-            return _GradientDiagonal(
-                forward_fn=self.forward_fn,
-                observed_data=self.observed_data,
-                inv_covar=self.inv_covar,
-                forward_fn_gradient=forward_fn_gradient,
-            )
-        else:
-            return _GradientScalar(
-                forward_fn=self.forward_fn,
-                observed_data=self.observed_data,
-                inv_covar=self.inv_covar,
-                forward_fn_gradient=forward_fn_gradient,
-            )
-
-    def _gradient_not_available(self, model_params: np.ndarray) -> np.ndarray:
-        """Raise an error if gradient functions are not provided."""
-        raise RuntimeError(
-            "Gradient function for the forward model must be provided to compute the likelihood gradient."
+        return grad_gaussian_loglikelihood(
+            model_params, self.forward_fn, self.forward_fn_gradient, self.state
         )
-
-    def _choose_exponential_term_function(
-        self,
-    ) -> Callable[[np.ndarray, np.ndarray], np.ndarray]:
-        """
-        Choose the appropriate exponential term computation function based on the shape of the inverse covariance matrix.
-
-        Returns
-        -------
-        exp_term_fn : Callable[[ndarray, ndarray], ndarray]
-            Function to compute the exponential term of the Gaussian likelihood.
-        """
-        if self.inv_covar.ndim == 2:
-            return _exponential_term_full
-        elif self.inv_covar.ndim == 1 and self.inv_covar.size > 1:
-            return _exponential_term_diagonal
-        elif self.inv_covar.ndim == 0 or self.inv_covar.size == 1:
-            return _exponential_term_scalar
-        else:
-            raise ValueError("Invalid shape for inverse covariance matrix.")
 
 
 def _exponential_term_full(inv_covar: np.ndarray, residuals: np.ndarray) -> np.ndarray:
@@ -225,6 +180,9 @@ def _exponential_term_full(inv_covar: np.ndarray, residuals: np.ndarray) -> np.n
 
     Parameters
     ----------
+    inv_covar : ndarray, shape (n, n)
+        Inverse covariance matrix.
+
     residuals : ndarray, shape (batch, n)
         Residual vectors (observed_data - predicted_data).
 
@@ -245,6 +203,9 @@ def _exponential_term_diagonal(
 
     Parameters
     ----------
+    inv_covar : ndarray, shape (n,)
+        Inverse covariance matrix (diagonal elements).
+
     residuals : ndarray, shape (batch, n)
         Residual vectors (observed_data - predicted_data).
 
@@ -264,6 +225,8 @@ def _exponential_term_scalar(
 
     Parameters
     ----------
+    inv_covar : ndarray, shape (1,)
+        Inverse covariance matrix (scalar).
     residuals : ndarray, shape (batch, n)
         Residual vectors (observed_data - predicted_data).
 
