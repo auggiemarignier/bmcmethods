@@ -92,10 +92,20 @@ def mcmc(
 
     _pool = DummyPool
     if config.parallel and not config.vectorise:
-        _pool = partial(
-            Pool,
-            processes=config.parallel if isinstance(config.parallel, int) else None,
-        )
+        if isinstance(config.parallel, bool):
+            processes = os.cpu_count()
+            if processes is None:
+                warnings.warn(
+                    "Could not determine CPU count; falling back to 1 process.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                processes = 1
+        elif isinstance(config.parallel, int):
+            processes = config.parallel
+        else:
+            raise ValueError("Invalid value for config.parallel. Must be bool or int.")
+        _pool = partial(Pool, processes=processes)
 
     with _pool() as pool:
         sampler = EnsembleSampler(
