@@ -7,9 +7,6 @@ import pytest
 from sampling.likelihood import (
     GaussianLikelihood,
     GaussianLikelihoodState,
-    _exponential_term_diagonal,
-    _exponential_term_full,
-    _exponential_term_scalar,
     _validate_covariance_matrix,
     gaussian_log_likelihood,
     grad_gaussian_loglikelihood,
@@ -343,28 +340,6 @@ def test_validate_covariance_matrix_full_not_pos_semidefinite():
         ValueError, match="Inverse covariance matrix must be positive semidefinite"
     ):
         _validate_covariance_matrix(mat, 2)
-
-
-class TestExponentialTermFunctions:
-    residual = np.array([[1.0, 2.0], [3.0, 4.0]])  # shape (batch=2, n=2)
-
-    def test_exponential_term_full(self):
-        inv_covar = np.array([[2.0, 1.0], [1.0, 1.0]])
-        expected = -0.5 * np.array([10.0, 58.0])
-        result = _exponential_term_full(inv_covar, self.residual)
-        np.testing.assert_allclose(result, expected)
-
-    def test_exponential_term_diagonal(self):
-        inv_covar = np.array([2.0, 1.0])
-        expected = -0.5 * np.array([6.0, 34.0])
-        result = _exponential_term_diagonal(inv_covar, self.residual)
-        np.testing.assert_allclose(result, expected)
-
-    def test_exponential_term_scalar(self):
-        inv_covar = np.array([2.0])
-        expected = -0.5 * np.array([10.0, 50.0])
-        result = _exponential_term_scalar(inv_covar, self.residual)
-        np.testing.assert_allclose(result, expected)
 
 
 class TestBatchedVsScalar:

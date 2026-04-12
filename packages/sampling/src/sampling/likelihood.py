@@ -45,11 +45,12 @@ def gaussian_log_likelihood(
     residuals = state.observed_data[None, :] - predicted
 
     if state.covar_kind == CovarianceKind.FULL:
-        out = _exponential_term_full(state.inv_covar, residuals)
+        # Doing it this way avoids computing the full (batch x batch) matrix of residuals @ inv_covar @ residuals.T and then discarding all the off-diagonal terms
+        out = -0.5 * np.sum((residuals @ state.inv_covar) * residuals, axis=1)
     elif state.covar_kind == CovarianceKind.DIAG:
-        out = _exponential_term_diagonal(state.inv_covar, residuals)
+        out = -0.5 * np.sum(residuals**2 * state.inv_covar[None, :], axis=1)
     else:
-        out = _exponential_term_scalar(state.inv_covar, residuals)
+        out = -0.5 * np.sum(residuals**2, axis=1) * state.inv_covar[0]
 
     return out.squeeze()
 
@@ -172,70 +173,6 @@ class GaussianLikelihood:
         return grad_gaussian_loglikelihood(
             model_params, self.forward_fn, self.forward_fn_gradient, self.state
         )
-
-
-def _exponential_term_full(inv_covar: np.ndarray, residuals: np.ndarray) -> np.ndarray:
-    """
-    Compute the exponential term of the Gaussian likelihood for a full covariance matrix.
-
-    Parameters
-    ----------
-    inv_covar : ndarray, shape (n, n)
-        Inverse covariance matrix.
-
-    residuals : ndarray, shape (batch, n)
-        Residual vectors (observed_data - predicted_data).
-
-    Returns
-    -------
-    exp_term : ndarray, shape (batch,)
-        The exponential term values.
-    """
-    # Doing it this way avoids computing the full (batch x batch) matrix of residuals @ inv_covar @ residuals.T and then discarding all the off-diagonal terms
-    return -0.5 * np.sum((residuals @ inv_covar) * residuals, axis=1)
-
-
-def _exponential_term_diagonal(
-    inv_covar: np.ndarray, residuals: np.ndarray
-) -> np.ndarray:
-    """
-    Compute the exponential term of the Gaussian likelihood for a diagonal covariance matrix.
-
-    Parameters
-    ----------
-    inv_covar : ndarray, shape (n,)
-        Inverse covariance matrix (diagonal elements).
-
-    residuals : ndarray, shape (batch, n)
-        Residual vectors (observed_data - predicted_data).
-
-    Returns
-    -------
-    exp_term : ndarray, shape (batch,)
-        The exponential term values.
-    """
-    return -0.5 * np.sum(residuals**2 * inv_covar[None, :], axis=1)
-
-
-def _exponential_term_scalar(
-    inv_covar: np.ndarray, residuals: np.ndarray
-) -> np.ndarray:
-    """
-    Compute the exponential term of the Gaussian likelihood for a scalar covariance.
-
-    Parameters
-    ----------
-    inv_covar : ndarray, shape (1,)
-        Inverse covariance matrix (scalar).
-    residuals : ndarray, shape (batch, n)
-        Residual vectors (observed_data - predicted_data).
-
-    Returns
-    -------
-    exp_term : ndarray, shape (batch,)
-        The exponential term values.
-    """
-    return -0.5 * np.sum(residuals**2, axis=1) * inv_covar[0]
 
 
 def _validate_data_vector(data: np.ndarray) -> None:
