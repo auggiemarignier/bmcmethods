@@ -3,30 +3,15 @@
 https://github.com/astro-informatics/harmonic/blob/main/notebooks/gaussian_sddr_example.ipynb
 """
 
-from functools import partial
-
 import harmonic as hm
 import numpy as np
 from ris.estimate import compute_harmonic_mean, ln_evidence_from_ln_inverse
+from sampling.likelihood import GaussianLikelihood
 from sampling.priors import GaussianPrior
 from sampling.sampling import MCMCConfig, mcmc
 from sddr.sddr import sddr
 
 rng = np.random.default_rng(42)
-
-
-def ln_likelihood(x, simulator, data, inv_cov):
-    x = np.atleast_2d(x)
-    r = data - simulator(x)
-    chi2 = np.einsum("ij,ij->i", r, np.dot(inv_cov, r.T).T)
-    return -0.5 * chi2
-
-
-def ln_posterior(x, simulator, data, inv_cov, prior):
-    """Compute the log posterior."""
-    x = np.atleast_2d(x)
-    ln_posterior = ln_likelihood(x, simulator, data, inv_cov) + prior.logpdf(x)
-    return ln_posterior
 
 
 def init_cov(ndim):
@@ -101,14 +86,15 @@ def test_sddr_vs_ris():
 
     noiseless_data = mock_simulator(truth)[0]
 
-    ln_likelihood_super = partial(
-        ln_likelihood, simulator=mock_simulator, data=noiseless_data, inv_cov=inv_cov
+    ln_likelihood_super = GaussianLikelihood(
+        forward_fn=mock_simulator,
+        observed_data=noiseless_data,
+        inv_covar=inv_cov,
     )
-    ln_likelihood_nested = partial(
-        ln_likelihood,
-        simulator=nested_mock_simulator,
-        data=noiseless_data,
-        inv_cov=inv_cov,
+    ln_likelihood_nested = GaussianLikelihood(
+        forward_fn=nested_mock_simulator,
+        observed_data=noiseless_data,
+        inv_covar=inv_cov,
     )
 
     mcmc_cfg = MCMCConfig(nwalkers=100, nsteps=6000, parallel=False)
@@ -129,7 +115,7 @@ def test_sddr_vs_ris():
         mcmc_cfg,
     )
 
-    marginalised_samples = super_samples[:, -n_nested:]
+    marginalised_samples = super_samples[:, :, -n_nested:].reshape(-1, n_nested)
 
     histogram_model = hm.model_classical.HistogramModel(ndim=2, nbins=300)
     histogram_model.fit(marginalised_samples)
@@ -157,19 +143,19 @@ def test_sddr_vs_ris():
     super_model = hm.model.RQSplineModel(
         n_params, standardize=standardize, temperature=temperature
     )
-    super_model.fit(super_samples, epochs=epochs_num, verbose=True)
+    super_model.fit(super_samples.reshape(-1, n_params), epochs=epochs_num, verbose=True)
     nested_model = hm.model.RQSplineModel(
         n_params - n_nested, standardize=standardize, temperature=temperature
     )
-    nested_model.fit(nested_samples, epochs=epochs_num, verbose=True)
+    nested_model.fit(nested_samples.reshape(-1, n_params - n_nested), epochs=epochs_num, verbose=True)
     super_ris_z = compute_harmonic_mean(
-        super_samples.reshape(mcmc_cfg.nwalkers, -1, n_params),
-        super_ln_prob.reshape(mcmc_cfg.nwalkers, -1),
+        super_samples.swapaxes(0, 1),
+        super_ln_prob.swapaxes(0, 1),
         super_model,
     )
     nested_ris_z = compute_harmonic_mean(
-        nested_samples.reshape(mcmc_cfg.nwalkers, -1, n_params - n_nested),
-        nested_ln_prob.reshape(mcmc_cfg.nwalkers, -1),
+        nested_samples.swapaxes(0, 1),
+        nested_ln_prob.swapaxes(0, 1),
         nested_model,
     )
     ris_log_bf = (
