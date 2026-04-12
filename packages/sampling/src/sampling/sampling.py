@@ -297,15 +297,16 @@ def nuts(
     config : MCMCConfig or None, optional
         MCMC configuration. If None, uses default configuration.
         The following parameters are used: ``nwalkers``, ``nsteps``,
-        ``burn_in``, ``thin``, ``progress``, ``parallel``.
-        The following parameters are ignored: ``vectorise``.
+        ``progress``, ``parallel``.
+        The following parameters are ignored by this implementation:
+        ``burn_in``, ``thin``.
 
     Returns
     -------
     samples : ndarray, shape (nsteps, nwalkers, ndim)
-        MCMC samples of the model parameters, after burn-in and thinning.
+        MCMC samples of the model parameters for the full chain.
     lnprob : ndarray, shape (nsteps, nwalkers,)
-        Log-probabilities of the MCMC samples, after burn-in and thinning.
+        Log-probabilities of the MCMC samples for the full chain.
     """
     # TODO: Sort out how the gradients data gets passed to the workers
 
