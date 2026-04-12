@@ -31,8 +31,6 @@ class MCMCConfig:
         Number of MCMC steps.
     burn_in : int
         Number of burn-in steps to discard.
-    vectorise : bool
-        Whether to vectorize the likelihood and prior evaluations.
     parallel : bool or int
         Whether to use parallel processing. If an integer is given, it specifies the number of processes to use.
     progress : bool
@@ -44,7 +42,6 @@ class MCMCConfig:
     nwalkers: int = 50
     nsteps: int = 1000
     burn_in: int = 200
-    vectorise: bool = False
     parallel: bool | int = True
     progress: bool = True
     thin: int = 1
@@ -65,12 +62,10 @@ def mcmc(
         Number of dimensions in the parameter space.
     likelihood : Callable[[ndarray], float | ndarray]
         Likelihood function that takes model parameters and returns log-likelihood.
-        Should support both scalar (1D) and vectorised (2D batch) inputs if
-        config.vectorise is True.
+        Should support both scalar (1D) and vectorised (2D batch) inputs.
     prior : PriorFunction
         Prior function that takes model parameters and returns log-prior.
-        Should support both scalar (1D) and vectorised (2D batch) inputs if
-        config.vectorise is True.
+        Should support both scalar (1D) and vectorised (2D batch) inputs.
     rng : np.random.Generator
         Random number generator for initializing walkers.
     config : MCMCConfig or None, optional
@@ -91,7 +86,7 @@ def mcmc(
     posterior = Posterior(likelihood, prior)
 
     _pool = DummyPool
-    if config.parallel and not config.vectorise:
+    if config.parallel:
         if isinstance(config.parallel, bool):
             processes = os.cpu_count()
             if processes is None:
@@ -108,9 +103,7 @@ def mcmc(
         _pool = partial(Pool, processes=processes)
 
     with _pool() as pool:
-        sampler = EnsembleSampler(
-            config.nwalkers, ndim, posterior, pool=pool, vectorize=config.vectorise
-        )
+        sampler = EnsembleSampler(config.nwalkers, ndim, posterior, pool=pool)
         sampler.run_mcmc(initial_pos, config.nsteps, progress=config.progress)
 
     return _burn_and_thin_sampler(sampler, config.burn_in, config.thin)
@@ -131,12 +124,10 @@ def ptmcmc(
         Number of dimensions in the parameter space.
     likelihood : Callable[[ndarray], float | ndarray]
         Likelihood function that takes model parameters and returns log-likelihood.
-        Should support both scalar (1D) and vectorised (2D batch) inputs if
-        config.vectorise is True.
+        Should support both scalar (1D) and vectorised (2D batch) inputs.
     prior : PriorFunction
         Prior function that takes model parameters and returns log-prior.
-        Should support both scalar (1D) and vectorised (2D batch) inputs if
-        config.vectorise is True.
+        Should support both scalar (1D) and vectorised (2D batch) inputs.
     rng : np.random.Generator
         Random number generator for initializing walkers.
     config : MCMCConfig or None, optional
