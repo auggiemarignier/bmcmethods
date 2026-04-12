@@ -64,8 +64,8 @@ def grad_gaussian_loglikelihood(
 ) -> np.ndarray:
     """Compute the gradient of the Gaussian log-likelihood with respect to model parameters."""
     if state.forward_fn_gradient is None:
-        raise ValueError(
-            "state must have a function to calculate the gradient of the forward function."
+        raise RuntimeError(
+            "Gradient unavailable: state.forward_fn_gradient is not set."
         )
 
     model_params = np.atleast_2d(model_params)
