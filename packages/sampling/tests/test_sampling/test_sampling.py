@@ -7,7 +7,7 @@ behaviour, and error on unimplemented prior initialisation.
 from unittest.mock import patch
 
 import numpy as np
-from sampling.likelihood import GaussianLikelihood
+from sampling.likelihood.gaussian import GaussianLikelihood
 from sampling.priors import UniformPrior
 from sampling.sampling import MCMCConfig, mcmc, nuts, ptmcmc
 

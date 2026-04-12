@@ -14,7 +14,7 @@ from ptemcee import Sampler
 from tqdm import tqdm
 
 from ._util import DummyPool
-from .likelihood import GaussianLikelihood
+from .likelihood.gaussian import GaussianLikelihood
 from .posterior import Posterior
 from .priors import PriorFunction
 

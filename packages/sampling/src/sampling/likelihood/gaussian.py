@@ -6,6 +6,8 @@ from enum import StrEnum, auto
 
 import numpy as np
 
+from ._base import ForwardFunction, ForwardGradientFunction, LikelihoodBase
+
 
 class CovarianceKind(StrEnum):
     """Enumeration for the type of covariance matrix used in the Gaussian likelihood."""
@@ -19,8 +21,10 @@ class CovarianceKind(StrEnum):
 class GaussianLikelihoodState:
     """Container for the state of the Gaussian likelihood, used for pickling when using multiprocessing."""
 
+    forward_fn: ForwardFunction
     observed_data: np.ndarray
     inv_covar: np.ndarray
+    forward_fn_gradient: ForwardGradientFunction | None = None
     covar_kind: CovarianceKind = field(init=False)
 
     def __post_init__(self) -> None:
@@ -36,12 +40,11 @@ class GaussianLikelihoodState:
 
 def gaussian_log_likelihood(
     model_params: np.ndarray,
-    forward_fn: Callable[[np.ndarray], np.ndarray],
     state: GaussianLikelihoodState,
 ) -> np.ndarray:
     """Compute the Gaussian log-likelihood for given model parameters."""
     model_params = np.atleast_2d(model_params)
-    predicted = forward_fn(model_params)
+    predicted = state.forward_fn(model_params)
     residuals = state.observed_data[None, :] - predicted
 
     if state.covar_kind == CovarianceKind.FULL:
@@ -57,15 +60,18 @@ def gaussian_log_likelihood(
 
 def grad_gaussian_loglikelihood(
     model_params: np.ndarray,
-    forward_fn: Callable[[np.ndarray], np.ndarray],
-    forward_fn_gradient: Callable[[np.ndarray], np.ndarray],
     state: GaussianLikelihoodState,
 ) -> np.ndarray:
     """Compute the gradient of the Gaussian log-likelihood with respect to model parameters."""
+    if state.forward_fn_gradient is None:
+        raise ValueError(
+            "state must have a function to calculate the gradient of the forward function."
+        )
+
     model_params = np.atleast_2d(model_params)
-    predicted = forward_fn(model_params)
+    predicted = state.forward_fn(model_params)
     residuals = state.observed_data[None, :] - predicted
-    J = forward_fn_gradient(model_params)
+    J = state.forward_fn_gradient(model_params)
     if J.ndim == 2:
         J = J[None, :, :]
 
@@ -80,7 +86,7 @@ def grad_gaussian_loglikelihood(
     return gradient.squeeze()
 
 
-class GaussianLikelihood:
+class GaussianLikelihood(LikelihoodBase):
     """
     Represents a Gaussian likelihood function for MCMC sampling.
 
@@ -132,8 +138,10 @@ class GaussianLikelihood:
         self.forward_fn_gradient = forward_fn_gradient
 
         self.state = GaussianLikelihoodState(
+            forward_fn=forward_fn,
             observed_data=observed_data,
             inv_covar=inv_covar,
+            forward_fn_gradient=forward_fn_gradient,
         )
 
     def __call__(self, model_params: np.ndarray) -> np.ndarray:
@@ -150,7 +158,7 @@ class GaussianLikelihood:
         log_likelihood : ndarray
             The log-likelihood value(s).
         """
-        return gaussian_log_likelihood(model_params, self.forward_fn, self.state)
+        return gaussian_log_likelihood(model_params, self.state)
 
     def gradient(self, model_params: np.ndarray) -> np.ndarray:
         """
@@ -170,8 +178,19 @@ class GaussianLikelihood:
             raise RuntimeError(
                 "Gradient function for the forward model must be provided to compute the likelihood gradient."
             )
-        return grad_gaussian_loglikelihood(
-            model_params, self.forward_fn, self.forward_fn_gradient, self.state
+        return grad_gaussian_loglikelihood(model_params, self.state)
+
+    @classmethod
+    def from_state(cls, state: GaussianLikelihoodState) -> LikelihoodBase:
+        """Initialse from a state object.
+
+        Usefull for initialising in multiple workers.
+        """
+        return cls(
+            state.forward_fn,
+            state.observed_data,
+            state.inv_covar,
+            state.forward_fn_gradient,
         )
 
 

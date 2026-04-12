@@ -4,7 +4,7 @@ import pickle
 
 import numpy as np
 import pytest
-from sampling.likelihood import (
+from sampling.likelihood.gaussian import (
     GaussianLikelihood,
     GaussianLikelihoodState,
     _validate_covariance_matrix,
@@ -29,87 +29,61 @@ def _dummy_forward_fn_gradient(model_params: np.ndarray) -> np.ndarray:
         )
 
 
-@pytest.mark.parametrize(
-    "inv_covar",
-    [
+@pytest.fixture(
+    params=[
         np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
         np.array([1.0, 1.0, 1.0]),
         np.array([1.0]),
     ],
     ids=["full_covariance", "diagonal_covariance", "scalar_covariance"],
 )
-def test_gaussian_log_likelihood_perfect_match(inv_covar: np.ndarray) -> None:
-    """Test the Gaussian log likelihood function."""
+def state(request) -> GaussianLikelihoodState:
     observed_data = np.array([1.0, 2.0, 3.0])
-
-    state = GaussianLikelihoodState(
+    return GaussianLikelihoodState(
+        forward_fn=_dummy_forward_fn,
         observed_data=observed_data,
-        inv_covar=inv_covar,
+        inv_covar=request.param,
+        forward_fn_gradient=_dummy_forward_fn_gradient,
     )
 
-    model_params = observed_data / 2.0  # So that predicted data matches observed data
-    log_likelihood = gaussian_log_likelihood(model_params, _dummy_forward_fn, state)
+
+def test_gaussian_log_likelihood_perfect_match(state: GaussianLikelihoodState) -> None:
+    """Test the Gaussian log likelihood function."""
+    model_params = (
+        state.observed_data / 2.0
+    )  # So that predicted data matches observed data
+    log_likelihood = gaussian_log_likelihood(model_params, state)
 
     expected_log_likelihood = 0.0  # Perfect match
     assert np.isclose(log_likelihood, expected_log_likelihood)
 
 
-@pytest.mark.parametrize(
-    "inv_covar",
-    [
-        np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
-        np.array([1.0, 1.0, 1.0]),
-        np.array([1.0]),
-    ],
-    ids=["full_covariance", "diagonal_covariance", "scalar_covariance"],
-)
-def test_gaussian_log_likelihood_non_perfect_match(inv_covar: np.ndarray) -> None:
+def test_gaussian_log_likelihood_non_perfect_match(
+    state: GaussianLikelihoodState,
+) -> None:
     """Test the Gaussian log likelihood function."""
-    observed_data = np.array([1.0, 2.0, 3.0])
-
-    state = GaussianLikelihoodState(
-        observed_data=observed_data,
-        inv_covar=inv_covar,
-    )
-
-    model_params = observed_data
-    log_likelihood = gaussian_log_likelihood(model_params, _dummy_forward_fn, state)
+    model_params = state.observed_data
+    log_likelihood = gaussian_log_likelihood(model_params, state)
 
     expected_log_likelihood = -0.5 * np.sum(
-        observed_data**2
+        state.observed_data**2
     )  # For this particular forward function
     assert np.isclose(log_likelihood, expected_log_likelihood)
 
 
-@pytest.mark.parametrize(
-    "inv_covar",
-    [
-        np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
-        np.array([1.0, 1.0, 1.0]),
-        np.array([1.0]),
-    ],
-    ids=["full_covariance", "diagonal_covariance", "scalar_covariance"],
-)
-def test_grad_gaussian_loglikelihood(inv_covar: np.ndarray) -> None:
+def test_grad_gaussian_loglikelihood(state: GaussianLikelihoodState) -> None:
     """Test the Gaussian loglikelihood gradient function."""
-    observed_data = np.array([1.0, 2.0, 3.0])
-    state = GaussianLikelihoodState(observed_data, inv_covar)
-
-    model_params = observed_data / 2.0
-    gradient = grad_gaussian_loglikelihood(
-        model_params, _dummy_forward_fn, _dummy_forward_fn_gradient, state
-    )
+    model_params = state.observed_data / 2.0
+    gradient = grad_gaussian_loglikelihood(model_params, state)
 
     expected_gradient = np.array(
         [0.0, 0.0, 0.0]
     )  # Gradient should be zero at the maximum likelihood point
     np.testing.assert_allclose(gradient, expected_gradient)
 
-    model_params = observed_data
-    gradient = grad_gaussian_loglikelihood(
-        model_params, _dummy_forward_fn, _dummy_forward_fn_gradient, state
-    )
-    expected_gradient = 2 * (observed_data - 2 * model_params)
+    model_params = state.observed_data
+    gradient = grad_gaussian_loglikelihood(model_params, state)
+    expected_gradient = 2 * (state.observed_data - 2 * model_params)
     np.testing.assert_allclose(gradient, expected_gradient)
 
 
@@ -276,7 +250,7 @@ def test_gaussian_likelihood_no_covariance_validation(monkeypatch):
         raise AssertionError("Should not be called!")
 
     monkeypatch.setattr(
-        "sampling.likelihood._validate_covariance_matrix",
+        "sampling.likelihood.gaussian._validate_covariance_matrix",
         fake_validate_covariance_matrix,
     )
 

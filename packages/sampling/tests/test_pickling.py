@@ -1,7 +1,7 @@
 import pickle
 
 import numpy as np
-from sampling.likelihood import GaussianLikelihood
+from sampling.likelihood.gaussian import GaussianLikelihood
 from sampling.posterior import Posterior
 from sampling.priors.component import PriorComponent
 from sampling.priors.compound import CompoundPrior
