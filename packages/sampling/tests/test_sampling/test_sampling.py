@@ -33,7 +33,7 @@ class DummyPrior:
         self.offset = offset
 
     def __call__(self, model_params: np.ndarray) -> np.ndarray:
-        return np.sum(model_params) + self.offset
+        return np.asarray(np.sum(model_params) + self.offset)
 
     def gradient(self, model_params: np.ndarray) -> np.ndarray:
         return np.zeros_like(model_params)
