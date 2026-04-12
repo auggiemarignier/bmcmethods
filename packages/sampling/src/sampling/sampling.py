@@ -2,9 +2,7 @@
 
 import os
 import warnings
-from collections.abc import Callable
 from dataclasses import dataclass
-from functools import partial
 from multiprocessing import Pool
 
 import numpy as np
@@ -12,6 +10,9 @@ from emcee import EnsembleSampler
 from pints import LogPDF, MCMCController, NoUTurnMCMC
 from ptemcee import Sampler
 from tqdm import tqdm
+
+from sampling._worker import init_worker, logl, logp
+from sampling.likelihood._base import LikelihoodBase
 
 from ._util import DummyPool
 from .likelihood import GaussianLikelihood
@@ -29,30 +30,55 @@ class MCMCConfig:
         Number of MCMC walkers.
     nsteps : int
         Number of MCMC steps.
-    burn_in : int
-        Number of burn-in steps to discard.
-    vectorise : bool
-        Whether to vectorize the likelihood and prior evaluations.
     parallel : bool or int
         Whether to use parallel processing. If an integer is given, it specifies the number of processes to use.
     progress : bool
         Whether to display a progress bar.
-    thin : int
-        Thinning factor for the MCMC samples.
     """
 
     nwalkers: int = 50
     nsteps: int = 1000
-    burn_in: int = 200
-    vectorise: bool = False
     parallel: bool | int = True
     progress: bool = True
-    thin: int = 1
 
 
-def mcmc(
+def make_pool[S](
+    config: MCMCConfig,
+    likelihood_cls: type[LikelihoodBase[S]],
+    likelihood_state: S,
+    prior: PriorFunction,
+):
+    """Create a pool object, initialising each worker with heavy read-only data to avoid large copies at each iteration."""
+    if not config.parallel:
+        init_worker(likelihood_cls, likelihood_state, prior)
+        return DummyPool()
+
+    if isinstance(config.parallel, bool):
+        processes = os.cpu_count()
+        if processes is None:
+            warnings.warn(
+                "Could not determine CPU count; falling back to 1 process.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            processes = 1
+    elif isinstance(config.parallel, int):
+        processes = config.parallel
+    else:
+        raise TypeError("Invalid type for config.parallel. Must be bool or int.")
+
+    pool = Pool(
+        processes=processes,
+        initializer=init_worker,
+        initargs=(likelihood_cls, likelihood_state, prior),
+    )
+
+    return pool
+
+
+def mcmc[S](
     ndim: int,
-    likelihood: Callable[[np.ndarray], float | np.ndarray],
+    likelihood: LikelihoodBase[S],
     prior: PriorFunction,
     rng: np.random.Generator,
     config: MCMCConfig | None = None,
@@ -65,12 +91,10 @@ def mcmc(
         Number of dimensions in the parameter space.
     likelihood : Callable[[ndarray], float | ndarray]
         Likelihood function that takes model parameters and returns log-likelihood.
-        Should support both scalar (1D) and vectorised (2D batch) inputs if
-        config.vectorise is True.
+        Should support both scalar (1D) and vectorised (2D batch) inputs.
     prior : PriorFunction
         Prior function that takes model parameters and returns log-prior.
-        Should support both scalar (1D) and vectorised (2D batch) inputs if
-        config.vectorise is True.
+        Should support both scalar (1D) and vectorised (2D batch) inputs.
     rng : np.random.Generator
         Random number generator for initializing walkers.
     config : MCMCConfig or None, optional
@@ -78,47 +102,29 @@ def mcmc(
 
     Returns
     -------
-    samples : ndarray, shape (num_samples, ndim)
-        MCMC samples of the model parameters, after burn-in and thinning.
-    lnprob : ndarray, shape (num_samples,)
-        Log-probabilities of the MCMC samples, after burn-in and thinning.
+    samples : ndarray, shape (nsteps, nwalkers, ndim)
+        MCMC samples of the model parameters.
+    lnprob : ndarray, shape (nsteps, nwalkers,)
+        Log-probabilities of the MCMC samples.
     """
     if config is None:
         config = MCMCConfig()
 
     initial_pos = prior.sample(config.nwalkers, rng)
 
-    posterior = Posterior(likelihood, prior)
+    pool_cm = make_pool(config, likelihood.__class__, likelihood.state, prior)
+    posterior = Posterior(logl, logp)
 
-    _pool = DummyPool
-    if config.parallel and not config.vectorise:
-        if isinstance(config.parallel, bool):
-            processes = os.cpu_count()
-            if processes is None:
-                warnings.warn(
-                    "Could not determine CPU count; falling back to 1 process.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-                processes = 1
-        elif isinstance(config.parallel, int):
-            processes = config.parallel
-        else:
-            raise ValueError("Invalid value for config.parallel. Must be bool or int.")
-        _pool = partial(Pool, processes=processes)
-
-    with _pool() as pool:
-        sampler = EnsembleSampler(
-            config.nwalkers, ndim, posterior, pool=pool, vectorize=config.vectorise
-        )
+    with pool_cm as pool:
+        sampler = EnsembleSampler(config.nwalkers, ndim, posterior, pool=pool)
         sampler.run_mcmc(initial_pos, config.nsteps, progress=config.progress)
 
-    return _burn_and_thin_sampler(sampler, config.burn_in, config.thin)
+    return sampler.get_chain(), sampler.get_log_prob()
 
 
-def ptmcmc(
+def ptmcmc[S](
     ndim: int,
-    likelihood: Callable[[np.ndarray], float | np.ndarray],
+    likelihood: LikelihoodBase[S],
     prior: PriorFunction,
     rng: np.random.Generator,
     config: MCMCConfig | None = None,
@@ -131,12 +137,10 @@ def ptmcmc(
         Number of dimensions in the parameter space.
     likelihood : Callable[[ndarray], float | ndarray]
         Likelihood function that takes model parameters and returns log-likelihood.
-        Should support both scalar (1D) and vectorised (2D batch) inputs if
-        config.vectorise is True.
+        Should support both scalar (1D) and vectorised (2D batch) inputs.
     prior : PriorFunction
         Prior function that takes model parameters and returns log-prior.
-        Should support both scalar (1D) and vectorised (2D batch) inputs if
-        config.vectorise is True.
+        Should support both scalar (1D) and vectorised (2D batch) inputs.
     rng : np.random.Generator
         Random number generator for initializing walkers.
     config : MCMCConfig or None, optional
@@ -144,9 +148,9 @@ def ptmcmc(
 
     Returns
     -------
-    samples : ndarray, shape (ntemps (10), nwalkers, num_samples, ndim)
+    samples : ndarray, shape (ntemps (10), nsteps, nwalkers, ndim)
         MCMC samples of the model parameters.
-    lnprob : ndarray, shape (ntemps (10), nwalkers, num_samples)
+    lnprob : ndarray, shape (ntemps (10), nsteps, nwalkers)
         Log-probabilities of the MCMC samples.
     """
     if config is None:
@@ -158,104 +162,25 @@ def ptmcmc(
         (ntemps, config.nwalkers, ndim)
     )
 
-    if config.parallel:
-        if isinstance(config.parallel, bool):
-            threads = os.cpu_count()
-            if threads is None:
-                warnings.warn(
-                    "Could not determine CPU count; falling back to 1 thread.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-                threads = 1
-        elif isinstance(config.parallel, int):
-            threads = config.parallel
-        else:
-            raise ValueError("Invalid value for config.parallel. Must be bool or int.")
-    else:
-        threads = 1
+    pool_cm = make_pool(config, likelihood.__class__, likelihood.state, prior)
 
-    sampler = Sampler(
-        config.nwalkers,
-        ndim,
-        likelihood,
-        prior,
-        threads=threads,
-        ntemps=ntemps,
-    )
-    for _ in tqdm(
-        sampler.sample(initial_pos, config.nsteps),
-        total=config.nsteps,
-        disable=not config.progress,
-    ):
-        pass
-    return sampler.chain, sampler.logprobability
+    with pool_cm as pool:
+        sampler = Sampler(
+            config.nwalkers,
+            ndim,
+            logl,
+            logp,
+            pool=pool,
+            ntemps=ntemps,
+        )
+        for _ in tqdm(
+            sampler.sample(initial_pos, config.nsteps),
+            total=config.nsteps,
+            disable=not config.progress,
+        ):
+            pass
 
-
-def _burn_and_thin_sampler(
-    sampler: EnsembleSampler, burn_in: int, thin: int
-) -> tuple[np.ndarray, np.ndarray]:
-    """Apply burn-in and thinning to an MCMC chain from emcee.
-
-    Parameters
-    ----------
-    sampler : EnsembleSampler
-        MCMC sampler from emcee.
-
-    Returns
-    -------
-    processed_chain : ndarray
-        Processed MCMC chain after burn-in and thinning.
-    processed_lnprob : ndarray
-        Processed log-probabilities after burn-in and thinning.
-    """
-    chain = sampler.get_chain()  # shape (nsteps, nwalkers, ndim)
-    chain = _burn_and_thin_array(chain, burn_in, thin)
-    samples = np.ascontiguousarray(chain.reshape(-1, sampler.ndim))
-
-    lnprob_chain = sampler.get_log_prob()  # shape (nsteps, nwalkers)
-    lnprob_chain = _burn_and_thin_array(lnprob_chain, burn_in, thin)
-    lnprob = np.ascontiguousarray(lnprob_chain.reshape(-1))
-
-    return samples, lnprob
-
-
-def _burn_and_thin_array(chain: np.ndarray, burn_in: int, thin: int) -> np.ndarray:
-    """Apply burn-in and thinning to an MCMC chain.
-
-    Parameters
-    ----------
-    chain : ndarray, shape (nsteps, nwalkers, ndim) or (nsteps, nwalkers)
-        MCMC chain to process.
-    burn_in : int
-        Number of burn-in steps to discard.
-    thin : int
-        Thinning factor.
-
-    Returns
-    -------
-    processed_chain : ndarray
-        Processed MCMC chain after burn-in and thinning.
-    """
-    nd = chain.ndim
-    if nd not in (2, 3):
-        raise ValueError("Chain must be 2D or 3D ndarray.")
-
-    if nd == 2:
-        # Add dummy ndim axis for uniform processing
-        chain = chain[:, :, np.newaxis]
-
-    total_steps = chain.shape[0]
-    burn_in_eff = burn_in if burn_in < total_steps else 0
-    steps_after_burn = total_steps - burn_in_eff
-    thin_eff = thin if (thin > 0 and steps_after_burn // thin > 0) else 1
-
-    processed_chain = chain[burn_in_eff::thin_eff, :, :]
-    if nd == 2:
-        # Remove dummy ndim axis if it was added
-        processed_chain = processed_chain[:, :, 0]
-
-    return processed_chain
+    return sampler.chain.swapaxes(1, 2), sampler.logprobability.swapaxes(1, 2)
 
 
 class PintsPDF(LogPDF):
@@ -300,16 +225,17 @@ def nuts(
     config : MCMCConfig or None, optional
         MCMC configuration. If None, uses default configuration.
         The following parameters are used: ``nwalkers``, ``nsteps``,
-        ``burn_in``, ``thin``, ``progress``, ``parallel``.
-        The following parameters are ignored: ``vectorise``.
+        ``progress``, ``parallel``.
 
     Returns
     -------
-    samples : ndarray, shape (num_samples, ndim)
-        MCMC samples of the model parameters, after burn-in and thinning.
-    lnprob : ndarray, shape (num_samples,)
-        Log-probabilities of the MCMC samples, after burn-in and thinning.
+    samples : ndarray, shape (nsteps, nwalkers, ndim)
+        MCMC samples of the model parameters for the full chain.
+    lnprob : ndarray, shape (nsteps, nwalkers,)
+        Log-probabilities of the MCMC samples for the full chain.
     """
+    # TODO: Sort out how the gradients data gets passed to the workers
+
     if config is None:
         config = MCMCConfig()
 
@@ -324,18 +250,7 @@ def nuts(
     nuts_mcmc.set_log_pdf_storage(True)
     nuts_mcmc.set_parallel(config.parallel)
 
-    chains = nuts_mcmc.run()  # shape (nwalkers, nsteps, ndim)
-    log_pdf = nuts_mcmc.log_pdfs()  # shape (nwalkers, nsteps)
+    chains = nuts_mcmc.run()
+    log_pdf = nuts_mcmc.log_pdfs()
 
-    # Transpose to (nsteps, nwalkers, ndim) and (nsteps, nwalkers)
-    chains = chains.transpose(1, 0, 2)
-    log_pdf = log_pdf.transpose(1, 0)
-
-    # Apply burn-in and thinning
-    chains = _burn_and_thin_array(chains, config.burn_in, config.thin)
-    log_pdf = _burn_and_thin_array(log_pdf, config.burn_in, config.thin)
-
-    samples = np.ascontiguousarray(chains.reshape(-1, ndim))
-    lnprob = np.ascontiguousarray(log_pdf.reshape(-1))
-
-    return samples, lnprob
+    return chains.swapaxes(0, 1), log_pdf.swapaxes(0, 1)
