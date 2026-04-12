@@ -4,6 +4,8 @@ Focus: shape handling (per-walker burn-in and thinning), parallel flag
 behaviour, and error on unimplemented prior initialisation.
 """
 
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 from sampling.likelihood import GaussianLikelihood
 from sampling.priors import UniformPrior
@@ -105,6 +107,54 @@ def test_ptmcmc_parallel_flag(rng: np.random.Generator) -> None:
 
     assert chain is not None
     assert logprob is not None
+
+
+def test_ptmcmc_parallel_true_threads_not_bool(rng: np.random.Generator) -> None:
+    """Regression: parallel=True must not pass a bool as threads to ptemcee.Sampler."""
+    import ptemcee
+
+    prior = LogPrior()
+    ndim = prior.n
+    cfg = MCMCConfig(nwalkers=2 * ndim, nsteps=5, burn_in=1, thin=1, parallel=True)
+
+    captured = {}
+    real_sampler = ptemcee.Sampler
+
+    def mock_sampler(*args, **kwargs):
+        captured["threads"] = kwargs.get("threads")
+        return real_sampler(*args, **kwargs)
+
+    with patch("sampling.sampling.Sampler", mock_sampler):
+        ptmcmc(ndim, likelihood_fn, prior, rng, cfg)
+
+    assert "threads" in captured, "threads kwarg was not passed to Sampler"
+    assert not isinstance(captured["threads"], bool), (
+        f"threads should not be a bool, got {captured['threads']!r}"
+    )
+
+
+def test_mcmc_parallel_true_processes_not_bool(rng: np.random.Generator) -> None:
+    """Regression: parallel=True must not pass a bool as processes to Pool."""
+    import multiprocessing
+
+    prior = LogPrior()
+    ndim = prior.n
+    cfg = MCMCConfig(nwalkers=4, nsteps=5, burn_in=1, thin=1, parallel=True)
+
+    captured = {}
+    real_pool = multiprocessing.Pool
+
+    def mock_pool(processes=None, *args, **kwargs):
+        captured["processes"] = processes
+        return real_pool(processes, *args, **kwargs)
+
+    with patch("sampling.sampling.Pool", mock_pool):
+        mcmc(ndim, likelihood_fn, prior, rng, cfg)
+
+    assert "processes" in captured, "processes kwarg was not passed to Pool"
+    assert not isinstance(captured["processes"], bool), (
+        f"processes should not be a bool, got {captured['processes']!r}"
+    )
 
 
 def test_mcmc_default_config(
