@@ -174,8 +174,8 @@ def ptmcmc[S](
         sampler = Sampler(
             config.nwalkers,
             ndim,
-            likelihood,
-            prior,
+            logl,
+            logp,
             pool=pool,
             ntemps=ntemps,
         )
