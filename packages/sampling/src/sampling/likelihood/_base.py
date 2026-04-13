@@ -13,31 +13,6 @@ type ForwardFunction = Callable[[np.ndarray], np.ndarray]
 type ForwardGradientFunction = Callable[[np.ndarray], np.ndarray]
 
 
-class LikelihoodBase[T](ABC):
-    """
-    Generic interface for a model likelihood.
-
-    The important bit is: the sampler should call __call__(theta), while the heavy state lives separately in self.state.
-    """
-
-    state: T
-
-    @classmethod
-    @abstractmethod
-    def from_state(
-        cls,
-        state: T,
-        *,
-        forward_fn: ForwardFunction | None = None,
-        forward_fn_gradient: ForwardGradientFunction | None = None,
-    ) -> Self:
-        """Rebuild the likelihood from a serialisable state object."""
-
-    @abstractmethod
-    def __call__(self, model_params: np.ndarray) -> float | np.ndarray:
-        """Return the log likelihood."""
-
-
 class ForwardBase[T](ABC):
     """Generic interface for forward functions that may require internal data.
 
@@ -76,3 +51,30 @@ class ForwardGradientBase[T](ABC):
     @abstractmethod
     def __call__(self, model_params: np.ndarray) -> np.ndarray:
         """Forward modelling gradient."""
+
+
+class LikelihoodBase[T](ABC):
+    """
+    Generic interface for a model likelihood.
+
+    The important bit is: the sampler should call __call__(theta), while the heavy state lives separately in self.state.
+    """
+
+    state: T
+    forward: ForwardBase | None = None
+    forward_gradient: ForwardGradientBase | None = None
+
+    @classmethod
+    @abstractmethod
+    def from_state(
+        cls,
+        state: T,
+        *,
+        forward_fn: ForwardFunction | None = None,
+        forward_fn_gradient: ForwardGradientFunction | None = None,
+    ) -> Self:
+        """Rebuild the likelihood from a serialisable state object."""
+
+    @abstractmethod
+    def __call__(self, model_params: np.ndarray) -> float | np.ndarray:
+        """Return the log likelihood."""
