@@ -123,7 +123,7 @@ def ptmcmc[S](
         (ntemps, config.nwalkers, ndim)
     )
 
-    pool_cm = make_pool(config, likelihood.__class__, likelihood.state, prior)
+    pool_cm = make_pool(config.parallel, likelihood, prior)
 
     with pool_cm as pool:
         sampler = Sampler(
