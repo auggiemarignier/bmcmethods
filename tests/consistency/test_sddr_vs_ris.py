@@ -87,12 +87,12 @@ def test_sddr_vs_ris():
     noiseless_data = mock_simulator(truth)[0]
 
     ln_likelihood_super = GaussianLikelihood(
-        forward_fn=mock_simulator,
+        forward=mock_simulator,
         observed_data=noiseless_data,
         inv_covar=inv_cov,
     )
     ln_likelihood_nested = GaussianLikelihood(
-        forward_fn=nested_mock_simulator,
+        forward=nested_mock_simulator,
         observed_data=noiseless_data,
         inv_covar=inv_cov,
     )
@@ -143,11 +143,15 @@ def test_sddr_vs_ris():
     super_model = hm.model.RQSplineModel(
         n_params, standardize=standardize, temperature=temperature
     )
-    super_model.fit(super_samples.reshape(-1, n_params), epochs=epochs_num, verbose=True)
+    super_model.fit(
+        super_samples.reshape(-1, n_params), epochs=epochs_num, verbose=True
+    )
     nested_model = hm.model.RQSplineModel(
         n_params - n_nested, standardize=standardize, temperature=temperature
     )
-    nested_model.fit(nested_samples.reshape(-1, n_params - n_nested), epochs=epochs_num, verbose=True)
+    nested_model.fit(
+        nested_samples.reshape(-1, n_params - n_nested), epochs=epochs_num, verbose=True
+    )
     super_ris_z = compute_harmonic_mean(
         super_samples.swapaxes(0, 1),
         super_ln_prob.swapaxes(0, 1),

@@ -66,8 +66,8 @@ def test_likelihood_and_posterior_are_picklable():
     # Build a likelihood using a top-level forward function
     obs = np.zeros(2)
     lik = GaussianLikelihood(
-        forward_fn=forward_fn,
-        forward_fn_gradient=forward_fn_grad,
+        forward=forward_fn,
+        forward_gradient=forward_fn_grad,
         observed_data=obs,
         inv_covar=np.array([1.0]),
     )

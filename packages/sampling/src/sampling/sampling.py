@@ -1,9 +1,6 @@
 """Sampling using emcee."""
 
-import os
-import warnings
 from dataclasses import dataclass
-from multiprocessing import Pool
 
 import numpy as np
 from emcee import EnsembleSampler
@@ -11,10 +8,9 @@ from pints import LogPDF, MCMCController, NoUTurnMCMC
 from ptemcee import Sampler
 from tqdm import tqdm
 
-from sampling._worker import init_worker, logl, logp
+from sampling._worker import logl, logp, make_pool
 from sampling.likelihood._base import LikelihoodBase
 
-from ._util import DummyPool
 from .likelihood import GaussianLikelihood
 from .posterior import Posterior
 from .priors import PriorFunction
@@ -42,43 +38,9 @@ class MCMCConfig:
     progress: bool = True
 
 
-def make_pool[S](
-    config: MCMCConfig,
-    likelihood_cls: type[LikelihoodBase[S]],
-    likelihood_state: S,
-    prior: PriorFunction,
-):
-    """Create a pool object, initialising each worker with heavy read-only data to avoid large copies at each iteration."""
-    if not config.parallel:
-        init_worker(likelihood_cls, likelihood_state, prior)
-        return DummyPool()
-
-    if isinstance(config.parallel, bool):
-        processes = os.cpu_count()
-        if processes is None:
-            warnings.warn(
-                "Could not determine CPU count; falling back to 1 process.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-            processes = 1
-    elif isinstance(config.parallel, int):
-        processes = config.parallel
-    else:
-        raise TypeError("Invalid type for config.parallel. Must be bool or int.")
-
-    pool = Pool(
-        processes=processes,
-        initializer=init_worker,
-        initargs=(likelihood_cls, likelihood_state, prior),
-    )
-
-    return pool
-
-
-def mcmc[S](
+def mcmc(
     ndim: int,
-    likelihood: LikelihoodBase[S],
+    likelihood: LikelihoodBase,
     prior: PriorFunction,
     rng: np.random.Generator,
     config: MCMCConfig | None = None,
@@ -110,10 +72,9 @@ def mcmc[S](
     if config is None:
         config = MCMCConfig()
 
-    initial_pos = prior.sample(config.nwalkers, rng)
-
-    pool_cm = make_pool(config, likelihood.__class__, likelihood.state, prior)
+    pool_cm = make_pool(config.parallel, likelihood, prior)
     posterior = Posterior(logl, logp)
+    initial_pos = prior.sample(config.nwalkers, rng)
 
     with pool_cm as pool:
         sampler = EnsembleSampler(config.nwalkers, ndim, posterior, pool=pool)
@@ -162,7 +123,7 @@ def ptmcmc[S](
         (ntemps, config.nwalkers, ndim)
     )
 
-    pool_cm = make_pool(config, likelihood.__class__, likelihood.state, prior)
+    pool_cm = make_pool(config.parallel, likelihood, prior)
 
     with pool_cm as pool:
         sampler = Sampler(
