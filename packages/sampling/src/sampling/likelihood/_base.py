@@ -41,11 +41,11 @@ class ForwardGradientBase[T](ABC):
     The user is expected to use this class in their applications to separate state and callables.
     """
 
-    state: T | None
+    state: T
 
     @classmethod
     @abstractmethod
-    def from_state(cls, state: T | None) -> Self:
+    def from_state(cls, state: T) -> Self:
         """Rebuild the forward gradient function from a serialisable state object."""
 
     @abstractmethod
@@ -70,8 +70,8 @@ class LikelihoodBase[T](ABC):
         cls,
         state: T,
         *,
-        forward_fn: ForwardFunction | None = None,
-        forward_fn_gradient: ForwardGradientFunction | None = None,
+        forward: ForwardBase | None = None,
+        forward_gradient: ForwardGradientBase | None = None,
     ) -> Self:
         """Rebuild the likelihood from a serialisable state object."""
 

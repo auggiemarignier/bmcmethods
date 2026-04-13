@@ -4,7 +4,7 @@ import os
 import warnings
 from dataclasses import dataclass
 from multiprocessing import Pool
-from typing import Self
+from typing import Any, Self
 
 import numpy as np
 
@@ -19,54 +19,93 @@ WORKER_PRIOR: None | PriorFunction = None
 
 
 @dataclass(frozen=True)
-class _MCMCSpec[FS, LS, FGS]:
+class _IdentityState:
+    pass
+
+
+class _IdentityForward(ForwardBase[_IdentityState]):
+    """Internal no-op for when no forward model is provided.
+
+    Assumes model parameters are in data-space.
+    """
+
+    state = _IdentityState()
+
+    @classmethod
+    def from_state(cls, state: _IdentityState) -> Self:
+        return cls()
+
+    def __call__(self, model_params: np.ndarray) -> np.ndarray:
+        return model_params
+
+
+class _NoForwardGradient(ForwardGradientBase[_IdentityState]):
+    """Internal no-op for when no forward model gradient is provided.
+
+    Will raise an error if something tries to call this.
+    """
+
+    state = _IdentityState()
+
+    @classmethod
+    def from_state(cls, state: _IdentityState) -> Self:
+        return cls()
+
+    def __call__(self, model_params: np.ndarray) -> np.ndarray:
+        raise RuntimeError("A gradient for the forward function is needed.")
+
+
+@dataclass(frozen=True)
+class _MCMCSpec:
     """Specification of MCMC objects."""
 
-    likelihood_cls: type[LikelihoodBase[LS]]
-    likelihood_state: LS
+    likelihood_cls: type[LikelihoodBase[Any]]
+    likelihood_state: Any
     prior: PriorFunction
-    forward_cls: type[ForwardBase[FS]] | None = None
-    forward_state: FS | None = None
-    forward_gradient_cls: type[ForwardGradientBase[FGS]] | None = None
-    forward_gradient_state: FGS | None = None
+    forward_cls: type[ForwardBase[Any]]
+    forward_state: Any
+    forward_gradient_cls: type[ForwardGradientBase[Any]]
+    forward_gradient_state: Any
 
     @classmethod
     def from_likelihood_and_prior(
-        cls, likelihood: LikelihoodBase[LS], prior: PriorFunction
+        cls, likelihood: LikelihoodBase[Any], prior: PriorFunction
     ) -> Self:
-        fwd = likelihood.forward
-        forward_cls = None if fwd is None else fwd.__class__
-        forward_state = None if fwd is None else fwd.state
-
-        fwd_grad = likelihood.forward_gradient
-        forward_grad_cls = None if fwd_grad is None else fwd_grad.__class__
-        forward_grad_state = None if fwd_grad is None else fwd_grad.state
+        fwd = (
+            likelihood.forward if likelihood.forward is not None else _IdentityForward()
+        )
+        fwd_grad = (
+            likelihood.forward_gradient
+            if likelihood.forward_gradient is not None
+            else _NoForwardGradient()
+        )
 
         return cls(
             likelihood_cls=likelihood.__class__,
             likelihood_state=likelihood.state,
             prior=prior,
-            forward_cls=forward_cls,
-            forward_state=forward_state,
-            forward_gradient_cls=forward_grad_cls,
-            forward_gradient_state=forward_grad_state,
+            forward_cls=fwd.__class__,
+            forward_state=fwd.state,
+            forward_gradient_cls=fwd_grad.__class__,
+            forward_gradient_state=fwd_grad.state,
         )
 
 
 def make_pool(parallel: bool | int, likelihood: LikelihoodBase, prior: PriorFunction):
     """Create a pool object, initialising each worker with heavy read-only data to avoid large copies at each iteration."""
     spec = _MCMCSpec.from_likelihood_and_prior(likelihood, prior)
+    args = (  # could use astuple but just being explicit
+        spec.likelihood_cls,
+        spec.likelihood_state,
+        spec.prior,
+        spec.forward_cls,
+        spec.forward_state,
+        spec.forward_gradient_cls,
+        spec.forward_gradient_state,
+    )
 
     if not parallel:
-        init_worker(
-            spec.forward_cls,
-            spec.forward_state,
-            spec.likelihood_cls,
-            spec.likelihood_state,
-            spec.prior,
-            spec.forward_gradient_cls,
-            spec.forward_gradient_state,
-        )
+        init_worker(*args)
         return DummyPool()
 
     if isinstance(parallel, bool):
@@ -86,28 +125,20 @@ def make_pool(parallel: bool | int, likelihood: LikelihoodBase, prior: PriorFunc
     pool = Pool(
         processes=processes,
         initializer=init_worker,
-        initargs=(
-            spec.forward_cls,
-            spec.forward_state,
-            spec.likelihood_cls,
-            spec.likelihood_state,
-            spec.prior,
-            spec.forward_gradient_cls,
-            spec.forward_gradient_state,
-        ),
+        initargs=args,
     )
 
     return pool
 
 
 def init_worker[FS, LS, FGS](
-    forward_cls: type[ForwardBase[FS]],
-    forward_state: FS,
     likelihood_cls: type[LikelihoodBase[LS]],
     likelihood_state: LS,
     prior: PriorFunction,
-    forward_gradient_cls: type[ForwardGradientBase[FGS]] | None,
-    forward_gradient_state: FGS | None,
+    forward_cls: type[ForwardBase[FS]],
+    forward_state: FS,
+    forward_gradient_cls: type[ForwardGradientBase[FGS]],
+    forward_gradient_state: FGS,
 ) -> None:
     """
     Runs once in each worker process.
@@ -117,19 +148,11 @@ def init_worker[FS, LS, FGS](
     global WORKER_FORWARD, WORKER_LIKELIHOOD, WORKER_PRIOR, WORKER_FORWARD_GRADIENT
 
     WORKER_FORWARD = forward_cls.from_state(forward_state)
-
-    if forward_gradient_cls is not None:
-        WORKER_FORWARD_GRADIENT = forward_gradient_cls.from_state(
-            forward_gradient_state
-        )
-    else:
-        # explicitly setting to None here just in case some other process has modified the global variable somewhere.
-        WORKER_FORWARD_GRADIENT = None
-
+    WORKER_FORWARD_GRADIENT = forward_gradient_cls.from_state(forward_gradient_state)
     WORKER_LIKELIHOOD = likelihood_cls.from_state(
         likelihood_state,
-        forward_fn=WORKER_FORWARD,
-        forward_fn_gradient=WORKER_FORWARD_GRADIENT,
+        forward=WORKER_FORWARD,
+        forward_gradient=WORKER_FORWARD_GRADIENT,
     )
     WORKER_PRIOR = prior
 
