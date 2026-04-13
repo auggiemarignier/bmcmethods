@@ -132,7 +132,7 @@ class GaussianLikelihood(LikelihoodBase[GaussianLikelihoodState]):
             If the inverse covariance matrix is not symmetric or not positive semidefinite.
         """
         _validate_data_vector(observed_data)
-        inv_covar = np.array(inv_covar)
+        inv_covar = np.atleast_1d(np.asarray(inv_covar))
         if validate_covariance:
             _validate_covariance_matrix(inv_covar, observed_data.size)
         if example_model is not None:

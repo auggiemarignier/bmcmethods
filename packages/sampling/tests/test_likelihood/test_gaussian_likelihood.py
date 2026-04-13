@@ -303,6 +303,15 @@ class TestValidateCovariance:
         _ = GaussianLikelihood(fwd, observed_data, inv_covar, validate_covariance=False)
         assert not called
 
+    def test_float_inv_covar_normalised_to_1d(self, fwd: DummyForward) -> None:
+        """A plain float passed as inv_covar must be normalised to shape (1,), not 0D."""
+        observed_data = np.array([1.0, 2.0, 3.0])
+        likelihood = GaussianLikelihood(fwd, observed_data, 1.0)
+        assert likelihood.state.inv_covar.shape == (1,)
+        # Verify the likelihood can actually be evaluated without IndexError
+        result = likelihood(observed_data / 2.0)
+        assert np.isfinite(result)
+
     def test_scalar_positive(self) -> None:
         # Should not raise
         _validate_covariance_matrix(np.array([1.0]), 1)
