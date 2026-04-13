@@ -73,9 +73,9 @@ def test_worker_pool_logl_logp(likelihood: DummyLikelihood, prior: DummyPrior) -
             likelihood.state,
             prior,
             _worker._IdentityForward,
-            _worker._IdentityState,
+            _worker._IdentityState(),
             _worker._NoForwardGradient,
-            _worker._IdentityState,
+            _worker._IdentityState(),
         ),
     ) as p:
         inputs = [np.array([1.0]), np.array([2.0])]
