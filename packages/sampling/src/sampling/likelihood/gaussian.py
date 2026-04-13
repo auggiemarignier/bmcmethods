@@ -7,7 +7,13 @@ from typing import Self
 
 import numpy as np
 
-from ._base import ForwardFunction, ForwardGradientFunction, LikelihoodBase
+from ._base import (
+    ForwardBase,
+    ForwardFunction,
+    ForwardGradientBase,
+    ForwardGradientFunction,
+    LikelihoodBase,
+)
 
 
 class CovarianceKind(StrEnum):
@@ -93,10 +99,10 @@ class GaussianLikelihood(LikelihoodBase[GaussianLikelihoodState]):
 
     def __init__(
         self,
-        forward_fn: Callable[[np.ndarray], np.ndarray],
+        forward_fn: ForwardBase,
         observed_data: np.ndarray,
         inv_covar: float | np.ndarray,
-        forward_fn_gradient: None | Callable[[np.ndarray], np.ndarray] = None,
+        forward_fn_gradient: None | ForwardGradientBase = None,
         validate_covariance: bool = True,
         example_model: None | np.ndarray = None,
     ) -> None:
@@ -105,7 +111,7 @@ class GaussianLikelihood(LikelihoodBase[GaussianLikelihoodState]):
 
         Parameters
         ----------
-        forward_fn : Callable[[np.ndarray], np.ndarray]
+        forward_fn : ForwardBase
             Forward model function that takes model parameters and returns predicted data.
             Should accept shape (..., ndim) and return shape (..., n).
         observed_data : ndarray, shape (n,)
@@ -117,7 +123,7 @@ class GaussianLikelihood(LikelihoodBase[GaussianLikelihoodState]):
             Whether to validate the inverse covariance matrix. Default is True.
         example_model : None | ndarray, optional
             Example model parameters to validate the forward function. If None (default), no validation is performed.
-        forward_fn_gradient : None | Callable[[np.ndarray], np.ndarray], optional
+        forward_fn_gradient : None | ForwardGradientBase, optional
             Gradient of the forward function with respect to model parameters. If None (default), no gradient is available.
 
         Raises
@@ -183,20 +189,20 @@ class GaussianLikelihood(LikelihoodBase[GaussianLikelihoodState]):
         cls,
         state: GaussianLikelihoodState,
         *,
-        forward_fn: ForwardFunction | None = None,
-        forward_fn_gradient: ForwardGradientFunction | None = None,
+        forward: ForwardBase | None = None,
+        forward_gradient: ForwardGradientBase | None = None,
     ) -> Self:
         """Initialise from a state object.
 
         Useful for initialising in multiple workers.
         """
-        if forward_fn is None:
+        if forward is None:
             raise ValueError("Forward model required")
         return cls(
-            forward_fn,
+            forward,
             state.observed_data,
             state.inv_covar,
-            forward_fn_gradient,
+            forward_gradient,
         )
 
 
