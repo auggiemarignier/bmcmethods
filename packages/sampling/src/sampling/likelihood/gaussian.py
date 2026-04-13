@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum, auto
+from typing import Self
 
 import numpy as np
 
@@ -21,10 +22,8 @@ class CovarianceKind(StrEnum):
 class GaussianLikelihoodState:
     """Container for the state of the Gaussian likelihood, used for pickling when using multiprocessing."""
 
-    forward_fn: ForwardFunction
     observed_data: np.ndarray
     inv_covar: np.ndarray
-    forward_fn_gradient: ForwardGradientFunction | None = None
     covar_kind: CovarianceKind = field(init=False)
 
     def __post_init__(self) -> None:
@@ -40,11 +39,12 @@ class GaussianLikelihoodState:
 
 def gaussian_log_likelihood(
     model_params: np.ndarray,
+    forward_fn: ForwardFunction,
     state: GaussianLikelihoodState,
 ) -> np.ndarray:
     """Compute the Gaussian log-likelihood for given model parameters."""
     model_params = np.atleast_2d(model_params)
-    predicted = state.forward_fn(model_params)
+    predicted = forward_fn(model_params)
     residuals = state.observed_data[None, :] - predicted
 
     if state.covar_kind == CovarianceKind.FULL:
@@ -60,20 +60,14 @@ def gaussian_log_likelihood(
 
 def grad_gaussian_loglikelihood(
     model_params: np.ndarray,
+    forward_fn: ForwardFunction,
+    forward_fn_gradient: ForwardGradientFunction,
     state: GaussianLikelihoodState,
 ) -> np.ndarray:
     """Compute the gradient of the Gaussian log-likelihood with respect to model parameters."""
-    if state.forward_fn_gradient is None:
-        raise RuntimeError(
-            "Gradient unavailable: state.forward_fn_gradient is not set."
-        )
-
     model_params = np.atleast_2d(model_params)
-    predicted = state.forward_fn(model_params)
+    predicted = forward_fn(model_params)
     residuals = state.observed_data[None, :] - predicted
-    J = state.forward_fn_gradient(model_params)
-    if J.ndim == 2:
-        J = J[None, :, :]
 
     if state.covar_kind == CovarianceKind.FULL:
         weighted_residuals = np.einsum("bi,ij->bj", residuals, state.inv_covar)
@@ -82,11 +76,15 @@ def grad_gaussian_loglikelihood(
     else:
         weighted_residuals = residuals * state.inv_covar.item()
 
+    J = forward_fn_gradient(model_params)
+    if J.ndim == 2:
+        J = J[None, :, :]
+
     gradient = np.einsum("bni,bn->bi", J, weighted_residuals)
     return gradient.squeeze()
 
 
-class GaussianLikelihood(LikelihoodBase):
+class GaussianLikelihood(LikelihoodBase[GaussianLikelihoodState]):
     """
     Represents a Gaussian likelihood function for MCMC sampling.
 
@@ -138,10 +136,8 @@ class GaussianLikelihood(LikelihoodBase):
         self.forward_fn_gradient = forward_fn_gradient
 
         self.state = GaussianLikelihoodState(
-            forward_fn=forward_fn,
             observed_data=observed_data,
             inv_covar=inv_covar,
-            forward_fn_gradient=forward_fn_gradient,
         )
 
     def __call__(self, model_params: np.ndarray) -> np.ndarray:
@@ -158,7 +154,7 @@ class GaussianLikelihood(LikelihoodBase):
         log_likelihood : ndarray
             The log-likelihood value(s).
         """
-        return gaussian_log_likelihood(model_params, self.state)
+        return gaussian_log_likelihood(model_params, self.forward_fn, self.state)
 
     def gradient(self, model_params: np.ndarray) -> np.ndarray:
         """
@@ -178,19 +174,29 @@ class GaussianLikelihood(LikelihoodBase):
             raise RuntimeError(
                 "Gradient function for the forward model must be provided to compute the likelihood gradient."
             )
-        return grad_gaussian_loglikelihood(model_params, self.state)
+        return grad_gaussian_loglikelihood(
+            model_params, self.forward_fn, self.forward_fn_gradient, self.state
+        )
 
     @classmethod
-    def from_state(cls, state: GaussianLikelihoodState) -> "GaussianLikelihood":
+    def from_state(
+        cls,
+        state: GaussianLikelihoodState,
+        *,
+        forward_fn: ForwardFunction | None = None,
+        forward_fn_gradient: ForwardGradientFunction | None = None,
+    ) -> Self:
         """Initialise from a state object.
 
         Useful for initialising in multiple workers.
         """
+        if forward_fn is None:
+            raise ValueError("Forward model required")
         return cls(
-            state.forward_fn,
+            forward_fn,
             state.observed_data,
             state.inv_covar,
-            state.forward_fn_gradient,
+            forward_fn_gradient,
         )
 
 
