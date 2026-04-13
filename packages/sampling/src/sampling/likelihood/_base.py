@@ -30,3 +30,23 @@ class LikelihoodBase[T](ABC):
 
 type ForwardFunction = Callable[[np.ndarray], np.ndarray]
 type ForwardGradientFunction = Callable[[np.ndarray], np.ndarray]
+
+
+class ForwardBase[T](ABC):
+    """Generic interface for forward functions that may require internal data.
+
+    The heavy data should be stored in a separate state.
+
+    The user is expected to use this class in their applications to separate state and callables.
+    """
+
+    state: T
+
+    @classmethod
+    @abstractmethod
+    def from_state(cls, state: T) -> "ForwardBase[T]":
+        """Rebuild the forward function from a seraialisable state object."""
+
+    @abstractmethod
+    def __call__(self, model_params: np.ndarray) -> np.ndarray:
+        """Forward modelling."""
