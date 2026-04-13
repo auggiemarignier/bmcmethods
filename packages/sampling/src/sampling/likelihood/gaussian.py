@@ -7,6 +7,7 @@ from typing import Self
 
 import numpy as np
 
+from .._worker import _NoForwardGradient
 from ._base import (
     ForwardBase,
     ForwardFunction,
@@ -176,7 +177,9 @@ class GaussianLikelihood(LikelihoodBase[GaussianLikelihoodState]):
         gradient : ndarray
             The gradient of the log-likelihood with respect to model parameters.
         """
-        if self.forward_gradient is None:
+        if self.forward_gradient is None or isinstance(
+            self.forward_gradient, _NoForwardGradient
+        ):
             raise RuntimeError(
                 "Gradient function for the forward model must be provided to compute the likelihood gradient."
             )
