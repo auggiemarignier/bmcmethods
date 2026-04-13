@@ -99,10 +99,10 @@ class GaussianLikelihood(LikelihoodBase[GaussianLikelihoodState]):
 
     def __init__(
         self,
-        forward_fn: ForwardBase,
+        forward: ForwardBase,
         observed_data: np.ndarray,
         inv_covar: float | np.ndarray,
-        forward_fn_gradient: None | ForwardGradientBase = None,
+        forward_gradient: None | ForwardGradientBase = None,
         validate_covariance: bool = True,
         example_model: None | np.ndarray = None,
     ) -> None:
@@ -111,7 +111,7 @@ class GaussianLikelihood(LikelihoodBase[GaussianLikelihoodState]):
 
         Parameters
         ----------
-        forward_fn : ForwardBase
+        forward : ForwardBase
             Forward model function that takes model parameters and returns predicted data.
             Should accept shape (..., ndim) and return shape (..., n).
         observed_data : ndarray, shape (n,)
@@ -123,7 +123,7 @@ class GaussianLikelihood(LikelihoodBase[GaussianLikelihoodState]):
             Whether to validate the inverse covariance matrix. Default is True.
         example_model : None | ndarray, optional
             Example model parameters to validate the forward function. If None (default), no validation is performed.
-        forward_fn_gradient : None | ForwardGradientBase, optional
+        forward_gradient : None | ForwardGradientBase, optional
             Gradient of the forward function with respect to model parameters. If None (default), no gradient is available.
 
         Raises
@@ -136,10 +136,10 @@ class GaussianLikelihood(LikelihoodBase[GaussianLikelihoodState]):
         if validate_covariance:
             _validate_covariance_matrix(inv_covar, observed_data.size)
         if example_model is not None:
-            _validate_forward_function(forward_fn, example_model, observed_data.size)
+            _validate_forward_function(forward, example_model, observed_data.size)
 
-        self.forward_fn = forward_fn
-        self.forward_fn_gradient = forward_fn_gradient
+        self.forward = forward
+        self.forward_gradient = forward_gradient
 
         self.state = GaussianLikelihoodState(
             observed_data=observed_data,
@@ -160,7 +160,7 @@ class GaussianLikelihood(LikelihoodBase[GaussianLikelihoodState]):
         log_likelihood : ndarray
             The log-likelihood value(s).
         """
-        return gaussian_log_likelihood(model_params, self.forward_fn, self.state)
+        return gaussian_log_likelihood(model_params, self.forward, self.state)
 
     def gradient(self, model_params: np.ndarray) -> np.ndarray:
         """
@@ -176,12 +176,12 @@ class GaussianLikelihood(LikelihoodBase[GaussianLikelihoodState]):
         gradient : ndarray
             The gradient of the log-likelihood with respect to model parameters.
         """
-        if self.forward_fn_gradient is None:
+        if self.forward_gradient is None:
             raise RuntimeError(
                 "Gradient function for the forward model must be provided to compute the likelihood gradient."
             )
         return grad_gaussian_loglikelihood(
-            model_params, self.forward_fn, self.forward_fn_gradient, self.state
+            model_params, self.forward, self.forward_gradient, self.state
         )
 
     @classmethod
