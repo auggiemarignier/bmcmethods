@@ -1,9 +1,11 @@
 """Test the likelihood functions."""
 
 import pickle
+from typing import Self
 
 import numpy as np
 import pytest
+from sampling.likelihood._base import ForwardBase, ForwardGradientBase
 from sampling.likelihood.gaussian import (
     GaussianLikelihood,
     GaussianLikelihoodState,
@@ -18,6 +20,22 @@ def _dummy_forward_fn(model_params: np.ndarray) -> np.ndarray:
     return model_params * 2.0
 
 
+class DummyForward(ForwardBase[int]):
+    state = 1
+
+    @classmethod
+    def from_state(cls, state: int) -> Self:
+        return cls()
+
+    def __call__(self, model_params: np.ndarray) -> np.ndarray:
+        return _dummy_forward_fn(model_params)
+
+
+@pytest.fixture
+def fwd() -> DummyForward:
+    return DummyForward()
+
+
 def _dummy_forward_fn_gradient(model_params: np.ndarray) -> np.ndarray:
     """A simple forward function gradient for testing purposes."""
     if model_params.ndim == 1:
@@ -27,6 +45,22 @@ def _dummy_forward_fn_gradient(model_params: np.ndarray) -> np.ndarray:
             [2 * np.eye(model_params.shape[1]) for _ in range(model_params.shape[0])],
             axis=0,
         )
+
+
+class DummyForwardGradient(ForwardGradientBase[int]):
+    state = 2
+
+    @classmethod
+    def from_state(cls, state: int) -> Self:
+        return cls()
+
+    def __call__(self, model_params: np.ndarray) -> np.ndarray:
+        return _dummy_forward_fn_gradient(model_params)
+
+
+@pytest.fixture
+def fwd_grad() -> DummyForwardGradient:
+    return DummyForwardGradient()
 
 
 @pytest.fixture(
@@ -40,10 +74,8 @@ def _dummy_forward_fn_gradient(model_params: np.ndarray) -> np.ndarray:
 def state(request) -> GaussianLikelihoodState:
     observed_data = np.array([1.0, 2.0, 3.0])
     return GaussianLikelihoodState(
-        forward_fn=_dummy_forward_fn,
         observed_data=observed_data,
         inv_covar=request.param,
-        forward_fn_gradient=_dummy_forward_fn_gradient,
     )
 
 
@@ -52,7 +84,7 @@ def test_gaussian_log_likelihood_perfect_match(state: GaussianLikelihoodState) -
     model_params = (
         state.observed_data / 2.0
     )  # So that predicted data matches observed data
-    log_likelihood = gaussian_log_likelihood(model_params, state)
+    log_likelihood = gaussian_log_likelihood(model_params, _dummy_forward_fn, state)
 
     expected_log_likelihood = 0.0  # Perfect match
     assert np.isclose(log_likelihood, expected_log_likelihood)
@@ -63,7 +95,7 @@ def test_gaussian_log_likelihood_non_perfect_match(
 ) -> None:
     """Test the Gaussian log likelihood function."""
     model_params = state.observed_data
-    log_likelihood = gaussian_log_likelihood(model_params, state)
+    log_likelihood = gaussian_log_likelihood(model_params, _dummy_forward_fn, state)
 
     expected_log_likelihood = -0.5 * np.sum(
         state.observed_data**2
@@ -74,7 +106,9 @@ def test_gaussian_log_likelihood_non_perfect_match(
 def test_grad_gaussian_loglikelihood_at_maximum(state: GaussianLikelihoodState) -> None:
     """Test the Gaussian loglikelihood gradient function at the maximum."""
     model_params = state.observed_data / 2.0
-    gradient = grad_gaussian_loglikelihood(model_params, state)
+    gradient = grad_gaussian_loglikelihood(
+        model_params, _dummy_forward_fn, _dummy_forward_fn_gradient, state
+    )
 
     expected_gradient = np.array(
         [0.0, 0.0, 0.0]
@@ -85,44 +119,67 @@ def test_grad_gaussian_loglikelihood_at_maximum(state: GaussianLikelihoodState) 
 def test_grad_gaussian_loglikelihood_elsewhere(state: GaussianLikelihoodState) -> None:
     """Test the Gaussian loglikelihood gradient function at an easily calculable place."""
     model_params = state.observed_data
-    gradient = grad_gaussian_loglikelihood(model_params, state)
+    gradient = grad_gaussian_loglikelihood(
+        model_params, _dummy_forward_fn, _dummy_forward_fn_gradient, state
+    )
     expected_gradient = -2 * state.observed_data
     np.testing.assert_allclose(gradient, expected_gradient)
 
 
 class TestGaussianLikelihood:
-    def test_from_state(self, state: GaussianLikelihoodState) -> None:
-        obj = GaussianLikelihood.from_state(state)
+    def test_from_state(
+        self,
+        state: GaussianLikelihoodState,
+        fwd: DummyForward,
+        fwd_grad: DummyForwardGradient,
+    ) -> None:
+        obj = GaussianLikelihood.from_state(
+            state, forward=fwd, forward_gradient=fwd_grad
+        )
 
-        assert obj.forward_fn is state.forward_fn
-        assert obj.forward_fn_gradient is state.forward_fn_gradient
+        assert obj.forward is fwd
+        assert obj.forward_gradient is fwd_grad
 
         np.testing.assert_array_equal(obj.state.observed_data, state.observed_data)
         np.testing.assert_array_equal(obj.state.inv_covar, state.inv_covar)
         assert obj.state.covar_kind == state.covar_kind
 
-    def test_call(self, state: GaussianLikelihoodState) -> None:
-        likelihood = GaussianLikelihood.from_state(state)
+    def test_call(
+        self,
+        state: GaussianLikelihoodState,
+        fwd: DummyForward,
+        fwd_grad: DummyForwardGradient,
+    ) -> None:
+        likelihood = GaussianLikelihood.from_state(
+            state, forward=fwd, forward_gradient=fwd_grad
+        )
         model_params = state.observed_data
         expected_log_likelihood = -0.5 * np.sum(
             state.observed_data**2
         )  # For this particular forward function
         assert np.isclose(likelihood(model_params), expected_log_likelihood)
 
-    def test_gradient(self, state: GaussianLikelihoodState) -> None:
-        likelihood = GaussianLikelihood.from_state(state)
+    def test_gradient(
+        self,
+        state: GaussianLikelihoodState,
+        fwd: DummyForward,
+        fwd_grad: DummyForwardGradient,
+    ) -> None:
+        likelihood = GaussianLikelihood.from_state(
+            state, forward=fwd, forward_gradient=fwd_grad
+        )
         model_params = state.observed_data
         expected_gradient = -2 * state.observed_data
         np.testing.assert_allclose(likelihood.gradient(model_params), expected_gradient)
 
     def test_gradient_called_without_forward_fn_gradient(
-        self, state: GaussianLikelihoodState
+        self, state: GaussianLikelihoodState, fwd: DummyForward
     ) -> None:
         likelihood = GaussianLikelihood(
-            forward_fn=state.forward_fn,
+            forward=fwd,
             observed_data=state.observed_data,
             inv_covar=state.inv_covar,
-            forward_fn_gradient=None,
+            forward_gradient=None,
         )
         with pytest.raises(
             RuntimeError,
@@ -130,15 +187,17 @@ class TestGaussianLikelihood:
         ):
             likelihood.gradient(state.observed_data / 2.0)
 
-    def test_invalid_asymmetric_covariance_matrix(self) -> None:
+    def test_invalid_asymmetric_covariance_matrix(self, fwd: DummyForward) -> None:
         """Test that an asymmetrical covariance matrix raises a ValueError."""
         observed_data = np.array([1.0, 2.0])
         covar = np.array([[1.0, 2.0], [0.0, 1.0]])  # Asymmetric
 
         with pytest.raises(ValueError, match="Covariance matrix must be symmetric."):
-            GaussianLikelihood(_dummy_forward_fn, observed_data, covar)
+            GaussianLikelihood(fwd, observed_data, covar)
 
-    def test_invalid_non_positive_semidefinite_covariance_matrix(self) -> None:
+    def test_invalid_non_positive_semidefinite_covariance_matrix(
+        self, fwd: DummyForward
+    ) -> None:
         """Test that a non-positive semidefinite covariance matrix raises a ValueError."""
         observed_data = np.array([1.0, 2.0])
         covar = np.array([[1.0, 2.0], [2.0, 1.0]])  # Not positive semidefinite
@@ -146,17 +205,17 @@ class TestGaussianLikelihood:
         with pytest.raises(
             ValueError, match="Inverse covariance matrix must be positive semidefinite."
         ):
-            GaussianLikelihood(_dummy_forward_fn, observed_data, covar)
+            GaussianLikelihood(fwd, observed_data, covar)
 
-    def test_invalid_data_vector_dimension(self) -> None:
+    def test_invalid_data_vector_dimension(self, fwd: DummyForward) -> None:
         """Test that a non-one-dimensional data vector raises a ValueError."""
         observed_data = np.array([[1.0, 2.0], [3.0, 4.0]])  # 2D array
         covar = np.array([[1.0, 0.0], [0.0, 1.0]])
 
         with pytest.raises(ValueError, match="Data vector must be one-dimensional."):
-            GaussianLikelihood(_dummy_forward_fn, observed_data, covar)
+            GaussianLikelihood(fwd, observed_data, covar)
 
-    def test_invalid_forward_function_output_dimension(self) -> None:
+    def test_invalid_forward_function_output_dimension(self, fwd: DummyForward) -> None:
         """Test that a forward function returning incorrect output dimension raises a ValueError.
 
         This only happens when an example_model is provided to the factory.
@@ -164,27 +223,34 @@ class TestGaussianLikelihood:
         observed_data = np.array([1.0, 2.0])
         covar = np.array([[1.0, 0.0], [0.0, 1.0]])
 
-        def bad_forward_fn(model_params: np.ndarray) -> np.ndarray:
-            return np.array([1.0, 2.0, 3.0])  # wrong length
+        class BadForward(ForwardBase[int]):
+            state = 1
+
+            @classmethod
+            def from_state(cls, state: int) -> Self:
+                return cls()
+
+            def __call__(self, model_params: np.ndarray) -> np.ndarray:
+                return np.array([1.0, 2.0, 3.0])  # wrong length
 
         with pytest.raises(
             ValueError,
             match="shape",
         ):
             GaussianLikelihood(
-                bad_forward_fn, observed_data, covar, example_model=np.array([0.0, 0.0])
+                BadForward(), observed_data, covar, example_model=np.array([0.0, 0.0])
             )
 
         try:
             _ = GaussianLikelihood(
-                bad_forward_fn, observed_data, covar
+                BadForward(), observed_data, covar
             )  # a bad forward function but no example_model, so no check
         except Exception as e:
             pytest.fail(f"Unexpected exception: {e}")
 
         try:
             _ = GaussianLikelihood(
-                _dummy_forward_fn,
+                fwd,
                 observed_data,
                 covar,
                 example_model=np.array([0.0, 0.0]),
@@ -192,7 +258,7 @@ class TestGaussianLikelihood:
         except Exception as e:
             pytest.fail(f"Unexpected exception: {e}")
 
-    def test_invalid_covariance_matrix_size(self) -> None:
+    def test_invalid_covariance_matrix_size(self, fwd: DummyForward) -> None:
         """Test that a covariance matrix with incorrect size raises a ValueError."""
         observed_data = np.array([1.0, 2.0, 3.0])
         covar = np.array([[1.0, 0.0], [0.0, 1.0]])  # 2x2 instead of 3x3
@@ -201,13 +267,13 @@ class TestGaussianLikelihood:
             ValueError,
             match="shape",
         ):
-            GaussianLikelihood(_dummy_forward_fn, observed_data, covar)
+            GaussianLikelihood(fwd, observed_data, covar)
 
-    def test_picklable(self):
+    def test_picklable(self, fwd: DummyForward):
         """Test that the GaussianLikelihood object is picklable."""
         observed_data = np.array([1.0, 2.0])
         inv_covar = np.eye(2)
-        likelihood = GaussianLikelihood(_dummy_forward_fn, observed_data, inv_covar)
+        likelihood = GaussianLikelihood(fwd, observed_data, inv_covar)
         pickled = pickle.dumps(likelihood)
         unpickled = pickle.loads(pickled)
         params = np.array([0.0, 0.0])
@@ -215,7 +281,9 @@ class TestGaussianLikelihood:
 
 
 class TestValidateCovariance:
-    def test_gaussian_likelihood_no_covariance_validation(self, monkeypatch) -> None:
+    def test_gaussian_likelihood_no_covariance_validation(
+        self, monkeypatch, fwd: DummyForward
+    ) -> None:
         """Test that _validate_covariance_matrix is not called when validate_covariance is False."""
         observed_data = np.array([1.0, 2.0])
         inv_covar = np.array([[1.0, 0.0], [0.0, 1.0]])
@@ -232,9 +300,7 @@ class TestValidateCovariance:
         )
 
         # Should not raise, and should not call the fake validator
-        _ = GaussianLikelihood(
-            lambda x: observed_data, observed_data, inv_covar, validate_covariance=False
-        )
+        _ = GaussianLikelihood(fwd, observed_data, inv_covar, validate_covariance=False)
         assert not called
 
     def test_scalar_positive(self) -> None:
@@ -298,9 +364,11 @@ class TestBatchedVsScalar:
         ]
     )
 
-    def test_scalar_vs_batched_batch(self, state: GaussianLikelihoodState) -> None:
+    def test_scalar_vs_batched_batch(
+        self, state: GaussianLikelihoodState, fwd: DummyForward
+    ) -> None:
         """Test scalar and batched evaluation with batch of model parameters."""
-        likelihood = GaussianLikelihood.from_state(state)
+        likelihood = GaussianLikelihood.from_state(state, forward=fwd)
 
         # Test batch evaluation
         result_batch = likelihood(self.model_params_batch)
@@ -312,17 +380,21 @@ class TestBatchedVsScalar:
         )
         np.testing.assert_allclose(result_individual, result_batch)
 
-    def test_scalar_return_type(self, state: GaussianLikelihoodState) -> None:
+    def test_scalar_return_type(
+        self, state: GaussianLikelihoodState, fwd: DummyForward
+    ) -> None:
         """Test that scalar mode returns a 0D NumPy array (scalar array), not a Python float."""
-        likelihood = GaussianLikelihood.from_state(state)
+        likelihood = GaussianLikelihood.from_state(state, forward=fwd)
 
         result = likelihood(self.model_params_single)
         assert isinstance(result, np.ndarray)
         assert result.ndim == 0  # scalar array
 
-    def test_batched_return_type(self, state: GaussianLikelihoodState) -> None:
+    def test_batched_return_type(
+        self, state: GaussianLikelihoodState, fwd: DummyForward
+    ) -> None:
         """Test that batched mode returns array for batch input."""
-        likelihood = GaussianLikelihood.from_state(state)
+        likelihood = GaussianLikelihood.from_state(state, forward=fwd)
 
         result = likelihood(self.model_params_batch)
         assert isinstance(result, np.ndarray)

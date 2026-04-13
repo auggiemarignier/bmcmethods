@@ -1,11 +1,11 @@
 """Tests for the mcmc function in sampling module."""
 
+from typing import Self
+
 import numpy as np
 import pytest
-from sampling import sampling
-from sampling._util import DummyPool
 from sampling.likelihood import GaussianLikelihood
-from sampling.likelihood._base import LikelihoodBase
+from sampling.likelihood._base import ForwardBase, ForwardGradientBase, LikelihoodBase
 from sampling.priors import UniformPrior
 from sampling.sampling import MCMCConfig, mcmc, nuts, ptmcmc
 
@@ -17,7 +17,13 @@ class DummyLikelihood(LikelihoodBase):
         self.state = factor
 
     @classmethod
-    def from_state(cls, state: int) -> "DummyLikelihood":
+    def from_state(
+        cls,
+        state: int,
+        *,
+        forward: ForwardBase | None = None,
+        forward_gradient: ForwardGradientBase | None = None,
+    ) -> Self:
         return cls(state)
 
     def __call__(self, model_params: np.ndarray) -> float:
@@ -50,71 +56,6 @@ def likelihood() -> DummyLikelihood:
 @pytest.fixture
 def prior() -> DummyPrior:
     return DummyPrior()
-
-
-def test_make_pool_serial_calls_init_worker(monkeypatch):
-    called = {}
-
-    def fake_init_worker(likelihood_cls, likelihood_state, prior):
-        called["args"] = (likelihood_cls, likelihood_state, prior)
-
-    monkeypatch.setattr(sampling, "init_worker", fake_init_worker)
-
-    config = MCMCConfig(parallel=False)
-    pool = sampling.make_pool(
-        config,
-        DummyLikelihood,
-        1,
-        DummyPrior(),
-    )
-
-    assert isinstance(pool, DummyPool)
-    assert called["args"][0] is DummyLikelihood
-    assert called["args"][1] == 1
-    assert isinstance(called["args"][2], DummyPrior)
-
-
-class FakePool:
-    def __init__(self, *args, **kwargs):
-        self.args = args
-        self.kwargs = kwargs
-
-
-def test_make_pool_parallel_constructs_pool(monkeypatch):
-    captured = {}
-
-    def fake_pool(*args, **kwargs):
-        captured["args"] = args
-        captured["kwargs"] = kwargs
-        return FakePool(*args, **kwargs)
-
-    monkeypatch.setattr(sampling, "Pool", fake_pool)
-    monkeypatch.setattr(sampling, "init_worker", lambda *a, **k: None)
-
-    config = MCMCConfig(parallel=4)
-    pool = sampling.make_pool(
-        config,
-        DummyLikelihood,
-        1,
-        DummyPrior(),
-    )
-
-    assert isinstance(pool, FakePool)
-    assert captured["kwargs"]["processes"] == 4
-    assert captured["kwargs"]["initializer"] is sampling.init_worker
-    assert captured["kwargs"]["initargs"][0] is DummyLikelihood
-    assert captured["kwargs"]["initargs"][1] == 1
-
-
-def test_make_pool_true_uses_cpu_count(monkeypatch):
-    monkeypatch.setattr(sampling, "Pool", lambda **kwargs: kwargs)
-    monkeypatch.setattr(sampling, "init_worker", lambda *a, **k: None)
-    monkeypatch.setattr(sampling.os, "cpu_count", lambda: 8)
-
-    config = MCMCConfig(parallel=True)
-    pool = sampling.make_pool(config, DummyLikelihood, {"x": 1}, DummyPrior())
-
-    assert pool["processes"] == 8
 
 
 def test_mcmc_shapes_no_thin(
@@ -171,10 +112,7 @@ def test_mcmc_default_config(
     ndim = prior.n
     samples, lnprob = mcmc(ndim, likelihood, prior, rng)
     assert samples.shape == (1000, 50, ndim)
-    assert lnprob.shape == (
-        1000,
-        50,
-    )
+    assert lnprob.shape == (1000, 50)
 
 
 ####################################################################################################
@@ -182,17 +120,31 @@ def test_mcmc_default_config(
 ####################################################################################################
 
 
-def forward_fn(model_params: np.ndarray) -> np.ndarray:
-    model_params = np.atleast_2d(model_params)
-    return model_params  # (batch, ndim)
+class Identity(ForwardBase[None]):
+    state = None
+
+    @classmethod
+    def from_state(cls, state: None) -> Self:
+        return cls()
+
+    def __call__(self, model_params: np.ndarray) -> np.ndarray:
+        model_params = np.atleast_2d(model_params)
+        return model_params  # (batch, ndim)
 
 
-def forward_fn_gradient(model_params: np.ndarray) -> np.ndarray:
-    # Jacobian of identity is identity for each batch element
-    model_params = np.atleast_2d(model_params)
-    batch = model_params.shape[0]
-    ndim = model_params.shape[1]
-    return np.tile(np.eye(ndim)[None, :, :], (batch, 1, 1))  # (batch, n_obs, ndim)
+class IdentityGrad(ForwardGradientBase[None]):
+    state = None
+
+    @classmethod
+    def from_state(cls, state: None) -> Self:
+        return cls()
+
+    def __call__(self, model_params: np.ndarray) -> np.ndarray:
+        # Jacobian of identity is identity for each batch element
+        model_params = np.atleast_2d(model_params)
+        batch = model_params.shape[0]
+        ndim = model_params.shape[1]
+        return np.tile(np.eye(ndim)[None, :, :], (batch, 1, 1))  # (batch, n_obs, ndim)
 
 
 def test_nuts_uses_controller_and_returns_chains_and_logpdfs() -> None:
@@ -207,12 +159,12 @@ def test_nuts_uses_controller_and_returns_chains_and_logpdfs() -> None:
     inv_covar = np.eye(ndim)
 
     like = GaussianLikelihood(
-        forward_fn,
+        Identity(),
         observed,
         inv_covar,
         validate_covariance=True,
         example_model=np.zeros(ndim),
-        forward_fn_gradient=forward_fn_gradient,
+        forward_gradient=IdentityGrad(),
     )
 
     prior = UniformPrior(
@@ -228,7 +180,4 @@ def test_nuts_uses_controller_and_returns_chains_and_logpdfs() -> None:
     assert isinstance(chains, np.ndarray)
     assert isinstance(log_pdf, np.ndarray)
     assert chains.shape == (nsteps, nwalkers, ndim)
-    assert log_pdf.shape == (
-        nsteps,
-        nwalkers,
-    )
+    assert log_pdf.shape == (nsteps, nwalkers)
