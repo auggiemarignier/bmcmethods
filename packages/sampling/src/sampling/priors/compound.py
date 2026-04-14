@@ -12,11 +12,13 @@ import numpy as np
 from ._protocols import PriorComponentConfig, PriorType
 from .component import PriorComponent
 from .gaussian import GaussianPriorComponentConfig
+from .triangular import TriangularPriorComponentConfig
 from .uniform import UniformPrior, UniformPriorComponentConfig
 from .wrapped import WrappedUniformPriorComponentConfig
 
 _CONFIG_FACTORIES: dict[PriorType, type[PriorComponentConfig]] = {
     PriorType.GAUSSIAN: GaussianPriorComponentConfig,
+    PriorType.TRIANGULAR: TriangularPriorComponentConfig,
     PriorType.UNIFORM: UniformPriorComponentConfig,
     PriorType.WRAPPED_UNIFORM: WrappedUniformPriorComponentConfig,
 }

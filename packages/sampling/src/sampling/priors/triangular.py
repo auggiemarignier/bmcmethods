@@ -146,7 +146,7 @@ class TriangularPrior:
 class TriangularPriorComponentConfig:
     """Configuration for a Triangular prior component."""
 
-    type = PriorType.UNIFORM  # triangular arises from uniforms; choose UNIFORM type
+    type = PriorType.TRIANGULAR
 
     def __init__(
         self,

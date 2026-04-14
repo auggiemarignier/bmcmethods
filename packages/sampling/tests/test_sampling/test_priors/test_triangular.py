@@ -2,7 +2,7 @@
 
 import numpy as np
 import pytest
-from sampling.priors.triangular import TriangularPrior
+from sampling.priors import TriangularPrior
 
 
 @pytest.fixture
