@@ -1,4 +1,4 @@
-"""Triagular prior: sum of two independent Uniform(a, b) random variables.
+"""Triangular prior: sum of two independent Uniform(a, b) random variables.
 
 This implements an independent triangular prior for each parameter, where the
 triangular distribution for a single parameter is the convolution of two
