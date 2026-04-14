@@ -109,8 +109,8 @@ def test_triangular_gradient_at_right_boundary_is_zero(
 def test_triangular_gradient_at_midpoint_is_finite(
     valid_triangular_prior: TriangularPrior,
 ) -> None:
-    # x == a+b: kink; gradient is defined by the right-segment formula = -1/(b-a)
-    params = np.array([1.0, 1.0])  # both dims at midpoint a+b=1
+    # x == a+b: kink (mode of the distribution); gradient from the right-segment formula = -1/(b-a)
+    params = np.array([1.0, 1.0])  # both dims at mode a+b = 0+1 = 1
     grad = valid_triangular_prior.gradient(params)
     assert np.isfinite(grad).all()
     np.testing.assert_allclose(grad, -1.0)
@@ -211,6 +211,6 @@ class TestTriangularPriorComponentConfig:
             ]
         }
         prior = CompoundPrior.from_dict(config_dict)
-        # midpoint x=1.0 for a=0,b=1 -> logpdf=0
+        # mode of the triangular distribution is at a+b = 0+1 = 1.0, so logpdf=0
         logp = prior(np.array([1.0]))
         assert logp == pytest.approx(0.0)
