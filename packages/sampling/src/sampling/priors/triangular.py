@@ -67,17 +67,15 @@ class TriangularPrior:
 
         log_pdf = np.full(x.shape, -np.inf)
 
-        # Left segment: 2a <= x <= a+b
-        mask_left = (x >= left) & (x <= mid)
+        # Left segment: 2a < x <= a+b  (exclude x==2a where pdf==0)
+        mask_left = (x > left) & (x <= mid)
         # pdf = (x - 2a) / (b - a)**2
-        with np.errstate(divide="ignore"):
-            pdf_left = (x - left) / denom
+        pdf_left = (x - left) / denom
         log_pdf[mask_left] = np.log(pdf_left[mask_left])
 
-        # Right segment: a+b <= x <= 2b
-        mask_right = (x >= mid) & (x <= right)
-        with np.errstate(divide="ignore"):
-            pdf_right = (right - x) / denom
+        # Right segment: a+b <= x < 2b  (exclude x==2b where pdf==0)
+        mask_right = (x >= mid) & (x < right)
+        pdf_right = (right - x) / denom
         log_pdf[mask_right] = np.log(pdf_right[mask_right])
 
         # Sum log-pdfs across components to get joint log-pdf

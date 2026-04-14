@@ -1,8 +1,12 @@
 """Tests for TriangularPrior."""
 
+import warnings
+
 import numpy as np
 import pytest
 from sampling.priors import TriangularPrior
+from sampling.priors.compound import CompoundPrior
+from sampling.priors.triangular import TriangularPriorComponentConfig
 
 
 @pytest.fixture
@@ -48,6 +52,28 @@ def test_triangular_out_of_support(valid_triangular_prior: TriangularPrior) -> N
     assert logp == -np.inf
 
 
+def test_triangular_logpdf_at_left_boundary_is_neginf(
+    valid_triangular_prior: TriangularPrior,
+) -> None:
+    # x == 2a: pdf == 0, so logpdf must be -inf (no RuntimeWarning)
+    params = np.array([0.0, 1.0])  # first dim at left boundary 2a=0
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        logp = valid_triangular_prior(params)
+    assert logp == -np.inf
+
+
+def test_triangular_logpdf_at_right_boundary_is_neginf(
+    valid_triangular_prior: TriangularPrior,
+) -> None:
+    # x == 2b: pdf == 0, so logpdf must be -inf (no RuntimeWarning)
+    params = np.array([1.0, 2.0])  # second dim at right boundary 2b=2
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        logp = valid_triangular_prior(params)
+    assert logp == -np.inf
+
+
 def test_triangular_gradient_interior_points(
     valid_triangular_prior: TriangularPrior,
 ) -> None:
@@ -58,6 +84,45 @@ def test_triangular_gradient_interior_points(
     assert grad.shape == params.shape
     np.testing.assert_allclose(grad[0, 0], 2.0)
     np.testing.assert_allclose(grad[0, 1], -2.0)
+
+
+def test_triangular_gradient_at_left_boundary_is_zero(
+    valid_triangular_prior: TriangularPrior,
+) -> None:
+    # x == 2a: outside support, gradient must be 0 (no inf)
+    params = np.array([0.0, 1.0])  # first dim at 2a=0
+    grad = valid_triangular_prior.gradient(params)
+    assert np.isfinite(grad).all()
+    assert grad[0] == 0.0
+
+
+def test_triangular_gradient_at_right_boundary_is_zero(
+    valid_triangular_prior: TriangularPrior,
+) -> None:
+    # x == 2b: outside support, gradient must be 0 (no inf)
+    params = np.array([1.0, 2.0])  # second dim at 2b=2
+    grad = valid_triangular_prior.gradient(params)
+    assert np.isfinite(grad).all()
+    assert grad[1] == 0.0
+
+
+def test_triangular_gradient_at_midpoint_is_finite(
+    valid_triangular_prior: TriangularPrior,
+) -> None:
+    # x == a+b: kink; gradient is defined by the right-segment formula = -1/(b-a)
+    params = np.array([1.0, 1.0])  # both dims at midpoint a+b=1
+    grad = valid_triangular_prior.gradient(params)
+    assert np.isfinite(grad).all()
+    np.testing.assert_allclose(grad, -1.0)
+
+
+def test_triangular_gradient_outside_support_is_zero(
+    valid_triangular_prior: TriangularPrior,
+) -> None:
+    params = np.array([-1.0, 3.0])  # both outside support
+    grad = valid_triangular_prior.gradient(params)
+    assert np.isfinite(grad).all()
+    np.testing.assert_array_equal(grad, [0.0, 0.0])
 
 
 def test_triangular_sample_shape_and_reproducibility(
@@ -80,3 +145,72 @@ def test_triangular_batched_consistency(lower: np.ndarray, upper: np.ndarray) ->
     individual = np.array([prior(m) for m in models])
     batched = prior(np.array(models))
     np.testing.assert_array_equal(individual, batched)
+
+
+class TestTriangularPriorComponentConfig:
+    """Tests for TriangularPriorComponentConfig."""
+
+    def test_init_with_lists(self) -> None:
+        config = TriangularPriorComponentConfig(
+            lower_bounds=[0.0, 1.0],
+            upper_bounds=[2.0, 3.0],
+            indices=[0, 1],
+        )
+        assert config.lower_bounds == [0.0, 1.0]
+        assert config.upper_bounds == [2.0, 3.0]
+        assert config.indices == [0, 1]
+        assert config.type == "triangular"
+
+    def test_init_with_arrays(self) -> None:
+        lower = np.array([0.0, 1.0])
+        upper = np.array([2.0, 3.0])
+        config = TriangularPriorComponentConfig(
+            lower_bounds=lower, upper_bounds=upper, indices=[0, 1]
+        )
+        np.testing.assert_array_equal(config.lower_bounds, lower)
+        np.testing.assert_array_equal(config.upper_bounds, upper)
+
+    def test_to_prior_component(self) -> None:
+        from sampling.priors.component import PriorComponent
+
+        config = TriangularPriorComponentConfig(
+            lower_bounds=[0.0, 0.0],
+            upper_bounds=[1.0, 1.0],
+            indices=[0, 1],
+        )
+        component = config.to_prior_component()
+        assert isinstance(component, PriorComponent)
+        assert isinstance(component.prior_fn, TriangularPrior)
+        assert component.n == 2
+        np.testing.assert_array_equal(component.indices, [0, 1])
+
+    def test_compound_prior_from_dict_triangular(self) -> None:
+        config_dict = {
+            "components": [
+                {
+                    "type": "triangular",
+                    "lower_bounds": [0.0, 0.0],
+                    "upper_bounds": [1.0, 1.0],
+                    "indices": [0, 1],
+                }
+            ]
+        }
+        prior = CompoundPrior.from_dict(config_dict)
+        assert isinstance(prior, CompoundPrior)
+        assert prior.n == 2
+
+    def test_compound_prior_from_dict_evaluates_correctly(self) -> None:
+        config_dict = {
+            "components": [
+                {
+                    "type": "triangular",
+                    "lower_bounds": [0.0],
+                    "upper_bounds": [1.0],
+                    "indices": [0],
+                }
+            ]
+        }
+        prior = CompoundPrior.from_dict(config_dict)
+        # midpoint x=1.0 for a=0,b=1 -> logpdf=0
+        logp = prior(np.array([1.0]))
+        assert logp == pytest.approx(0.0)
