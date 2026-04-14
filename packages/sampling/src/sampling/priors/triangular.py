@@ -103,13 +103,19 @@ class TriangularPrior:
         grads = np.zeros_like(x)
 
         # For left segment, d/dx log((x-2a)/w^2) = 1/(x - 2a)
-        mask_left = (x >= left) & (x <= mid)
+        # Exclude x == 2a where the log-pdf is -inf and the expression would divide
+        # by zero. Keep x == a+b included so the existing midpoint overwrite behavior
+        # is preserved.
+        mask_left = (x > left) & (x <= mid)
         # Use broadcasting to compute differences then index with the mask
         diff_left = x - left
         grads[mask_left] = 1.0 / diff_left[mask_left]
 
         # For right segment, d/dx log((2b-x)/w^2) = -1/(2b - x)
-        mask_right = (x >= mid) & (x <= right)
+        # Exclude x == 2b where the log-pdf is -inf and the expression would divide
+        # by zero. Keep x == a+b included so the existing midpoint overwrite behavior
+        # is preserved.
+        mask_right = (x >= mid) & (x < right)
         diff_right = right - x
         grads[mask_right] = -1.0 / diff_right[mask_right]
 
