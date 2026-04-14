@@ -15,6 +15,7 @@ class PriorType(StrEnum):
     """Enumeration of supported prior types."""
 
     GAUSSIAN = auto()
+    TRIANGULAR = auto()
     UNIFORM = auto()
     WRAPPED_UNIFORM = auto()
 
