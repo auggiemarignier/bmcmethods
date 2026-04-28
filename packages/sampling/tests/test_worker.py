@@ -80,9 +80,9 @@ def test_worker_pool_logl_logp(likelihood: DummyLikelihood, prior: DummyPrior) -
             likelihood.state,
             prior,
             IdentityForward,
-            IdentityState(),
+            IdentityForward.state,
             NoForwardGradient,
-            IdentityState(),
+            None,
         ),
     ) as p:
         inputs = [np.array([1.0]), np.array([2.0])]
