@@ -5,6 +5,7 @@ The focus is the separation of data from the callable so that things are nicely 
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Self
 
 import numpy as np
@@ -51,6 +52,49 @@ class ForwardGradientBase[T](ABC):
     @abstractmethod
     def __call__(self, model_params: np.ndarray) -> np.ndarray:
         """Forward modelling gradient."""
+
+
+class NoForwardGradient(ForwardGradientBase[None]):
+    """Internal no-op sentinel used when no forward gradient is available.
+
+    This implements the same minimal interface as other `ForwardGradientBase`
+    implementations but raises a runtime error when called. Placing this
+    sentinel in the base module avoids import-time cycles between the
+    worker initialisation and individual likelihood modules.
+    """
+
+    state = None
+
+    @classmethod
+    def from_state(cls, state: None) -> "NoForwardGradient":
+        return cls()
+
+    def __call__(self, model_params: np.ndarray) -> np.ndarray:
+        raise RuntimeError("A gradient for the forward function is needed.")
+
+
+@dataclass(frozen=True)
+class IdentityState:
+    """Empty serialisable state for the identity forward model."""
+    pass
+
+
+class IdentityForward(ForwardBase[IdentityState]):
+    """Internal no-op forward placed in the base module for consistency.
+
+    Returns the input parameters unchanged — used when no forward model is
+    provided so that workers and likelihoods can uniformly expect a
+    `ForwardBase` implementation.
+    """
+
+    state = IdentityState()
+
+    @classmethod
+    def from_state(cls, state: IdentityState) -> "IdentityForward":
+        return cls()
+
+    def __call__(self, model_params: np.ndarray) -> np.ndarray:
+        return model_params
 
 
 class LikelihoodBase[T](ABC):

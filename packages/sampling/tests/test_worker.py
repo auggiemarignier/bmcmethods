@@ -5,7 +5,14 @@ import numpy as np
 import pytest
 from sampling import _worker
 from sampling._worker import DummyPool, init_worker, logl, logp
-from sampling.likelihood._base import ForwardBase, ForwardGradientBase, LikelihoodBase
+from sampling.likelihood._base import (
+    ForwardBase,
+    ForwardGradientBase,
+    IdentityForward,
+    IdentityState,
+    LikelihoodBase,
+    NoForwardGradient,
+)
 
 
 class DummyLikelihood(LikelihoodBase[int]):
@@ -72,10 +79,10 @@ def test_worker_pool_logl_logp(likelihood: DummyLikelihood, prior: DummyPrior) -
             likelihood.__class__,
             likelihood.state,
             prior,
-            _worker._IdentityForward,
-            _worker._IdentityState(),
-            _worker._NoForwardGradient,
-            _worker._IdentityState(),
+            IdentityForward,
+            IdentityForward.state,
+            NoForwardGradient,
+            None,
         ),
     ) as p:
         inputs = [np.array([1.0]), np.array([2.0])]
