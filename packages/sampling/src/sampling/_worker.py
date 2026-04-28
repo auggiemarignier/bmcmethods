@@ -9,7 +9,13 @@ from typing import Any, Self
 
 import numpy as np
 
-from .likelihood._base import ForwardBase, ForwardGradientBase, LikelihoodBase
+from .likelihood._base import (
+    ForwardBase,
+    ForwardGradientBase,
+    IdentityForward,
+    LikelihoodBase,
+    NoForwardGradient,
+)
 from .priors import PriorFunction
 
 WORKER_FORWARD: None | ForwardBase = None
@@ -80,41 +86,7 @@ class DummyPool[T, U]:
         pass
 
 
-@dataclass(frozen=True)
-class _IdentityState:
-    pass
-
-
-class _IdentityForward(ForwardBase[_IdentityState]):
-    """Internal no-op for when no forward model is provided.
-
-    Assumes model parameters are in data-space.
-    """
-
-    state = _IdentityState()
-
-    @classmethod
-    def from_state(cls, state: _IdentityState) -> Self:
-        return cls()
-
-    def __call__(self, model_params: np.ndarray) -> np.ndarray:
-        return model_params
-
-
-class _NoForwardGradient(ForwardGradientBase[_IdentityState]):
-    """Internal no-op for when no forward model gradient is provided.
-
-    Will raise an error if something tries to call this.
-    """
-
-    state = _IdentityState()
-
-    @classmethod
-    def from_state(cls, state: _IdentityState) -> Self:
-        return cls()
-
-    def __call__(self, model_params: np.ndarray) -> np.ndarray:
-        raise RuntimeError("A gradient for the forward function is needed.")
+# Use `NoForwardGradient` from the likelihood base module to avoid import cycles.
 
 
 @dataclass(frozen=True)
@@ -134,12 +106,12 @@ class _MCMCSpec:
         cls, likelihood: LikelihoodBase[Any], prior: PriorFunction
     ) -> Self:
         fwd = (
-            likelihood.forward if likelihood.forward is not None else _IdentityForward()
+            likelihood.forward if likelihood.forward is not None else IdentityForward()
         )
         fwd_grad = (
             likelihood.forward_gradient
             if likelihood.forward_gradient is not None
-            else _NoForwardGradient()
+            else NoForwardGradient()
         )
 
         return cls(
