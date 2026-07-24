@@ -26,31 +26,36 @@ So the full submodel posterior is:
 p_sub(theta | data) ∝ L_sub(theta) * pi_sub(theta) = N_3(theta)^2 * N_2(0).
 i.e. Z_sub = N_2(0) * ∫ N_3(theta)^2 dtheta.
 
+Using the new linear-Gaussian API, the evidence for each model is computed as
+calc_log_evidence(d, inferred=[GaussianComponent(A, mu, C)], nuisance=[GaussianComponent(A, mu, C)])
+where the inferred component encodes the prior on m and the nuisance component encodes
+the likelihood (which acts as an additional Gaussian factor on m).
 """
 
 import numpy as np
-from linear_gaussian import calc_Z
+from linear_gaussian import GaussianComponent, calc_log_evidence
 from scipy.stats import multivariate_normal
 from sddr.sddr import sddr
 
 
 def calculate_bf_lg() -> float:
     """Calculate Bayes Factor using linear Gaussian model evidence."""
-    super_mus = [np.zeros(5)] * 2
-    super_Cs = [np.eye(5)] * 2
-    super_As = [np.eye(5)] * 2
-    Z_super = calc_Z(super_mus, super_Cs, super_As)
+    d_super = np.zeros(5)
+    inferred_super = [GaussianComponent(A=np.eye(5), mu=np.zeros(5), C=np.eye(5))]
+    nuisance_super = [GaussianComponent(A=np.eye(5), mu=np.zeros(5), C=np.eye(5))]
+    log_Z_super = calc_log_evidence(d_super, inferred_super, nuisance_super)
 
-    sub_mus = [np.zeros(3)] * 2
-    sub_Cs = [np.eye(3)] * 2
-    sub_As = [np.eye(3)] * 2
+    d_sub = np.zeros(3)
+    inferred_sub = [GaussianComponent(A=np.eye(3), mu=np.zeros(3), C=np.eye(3))]
+    nuisance_sub = [GaussianComponent(A=np.eye(3), mu=np.zeros(3), C=np.eye(3))]
+    log_Z_sub_part = calc_log_evidence(d_sub, inferred_sub, nuisance_sub)
 
     nu = np.zeros(2)
-    Z_sub = calc_Z(sub_mus, sub_Cs, sub_As) * multivariate_normal.pdf(
+    log_Z_sub = log_Z_sub_part + multivariate_normal.logpdf(
         nu, mean=np.zeros(2), cov=np.eye(2)
     )
 
-    bf_lg = Z_sub / Z_super
+    bf_lg = np.exp(log_Z_sub - log_Z_super)
     return bf_lg
 
 

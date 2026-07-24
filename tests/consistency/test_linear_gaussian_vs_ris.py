@@ -1,30 +1,53 @@
 """Compare the RIS and linear Gaussian results.
 
-Test case is that of a single ND standard normal distribution.
-This is already normalised so the expected evidence is 1.0.
+A linear-Gaussian model with:
+  - Prior:      X ~ N(0, I_nd)
+  - Likelihood: d | X ~ N(X, I_nd)   (A = I, noise = N(0, I))
+  - Data:       d = 0
+
+The marginal (evidence) is:
+  p(d=0) = N(0; 0, 2*I_nd) = (4*pi)^{-nd/2}
+
+The posterior is:
+  p(X | d=0) = N(X; 0, 0.5*I_nd)
+
+We compute the evidence analytically with calc_log_evidence and estimate it
+numerically with RIS, then verify they agree.
+
+For RIS, the harmonic mean estimator uses:
+  - Samples drawn from the normalised posterior N(0, 0.5*I_nd)
+  - Log of the *unnormalised* posterior  log[p(d|X) p(X)]
+    = log N(d; X, I) + log N(X; 0, I)
 """
 
 import numpy as np
 from harmonic.model import RealNVPModel
-from linear_gaussian.lg import calc_Z
+from linear_gaussian import GaussianComponent, calc_log_evidence
 from ris.estimate import compute_harmonic_mean, evidence_from_ln_inverse
 from scipy.stats import multivariate_normal
 
 
-def calculate_z_lg(nd: int) -> float:
-    mus = [np.zeros(nd)]
-    Cs = [np.eye(nd)]
-    As = [np.eye(nd)]
-
-    Z = calc_Z(mus, Cs, As)
-    return Z
+def calculate_log_z_lg(nd: int, d: np.ndarray) -> float:
+    """Compute log-evidence analytically using the linear-Gaussian formula."""
+    inferred = [GaussianComponent(A=np.eye(nd), mu=np.zeros(nd), C=np.eye(nd))]
+    nuisance = [GaussianComponent(A=np.eye(nd), mu=np.zeros(nd), C=np.eye(nd))]
+    return calc_log_evidence(d, inferred, nuisance)
 
 
-def calculate_z_ris(nd: int) -> tuple[float, float]:
-    mn = multivariate_normal(mean=np.zeros(nd), cov=np.eye(nd))
-    train_samples = mn.rvs(size=5000)
-    inference_samples = mn.rvs(size=5000)
-    inference_ln_prob = mn.logpdf(inference_samples)
+def calculate_z_ris(nd: int, d: np.ndarray) -> tuple[float, float]:
+    """Estimate evidence via RIS harmonic mean estimator."""
+    # Posterior is N(0, 0.5*I)
+    posterior = multivariate_normal(mean=np.zeros(nd), cov=0.5 * np.eye(nd))
+
+    train_samples = posterior.rvs(size=5000)
+    inference_samples = posterior.rvs(size=5000)
+
+    # Log of the *unnormalised* posterior: log p(d|X) + log p(X)
+    likelihood = multivariate_normal(mean=np.zeros(nd), cov=np.eye(nd))
+    prior = multivariate_normal(mean=np.zeros(nd), cov=np.eye(nd))
+    inference_ln_prob = likelihood.logpdf(inference_samples - d) + prior.logpdf(
+        inference_samples
+    )
 
     model = RealNVPModel(nd)
     model.fit(train_samples, epochs=10)
@@ -42,7 +65,9 @@ def calculate_z_ris(nd: int) -> tuple[float, float]:
 
 def test_linear_gaussian_vs_ris():
     nd = 2
-    Z_lg = calculate_z_lg(nd)
-    Z_ris, Z_ris_std = calculate_z_ris(nd)
-    np.testing.assert_allclose(Z_lg, 1.0, rtol=1e-5)
+    d = np.zeros(nd)
+    log_Z_lg = calculate_log_z_lg(nd, d)
+    Z_lg = np.exp(log_Z_lg)
+    Z_ris, Z_ris_std = calculate_z_ris(nd, d)
+    np.testing.assert_allclose(Z_lg, (4 * np.pi) ** (-nd / 2), rtol=1e-5)
     np.testing.assert_allclose(Z_ris, Z_lg, rtol=0.01)
