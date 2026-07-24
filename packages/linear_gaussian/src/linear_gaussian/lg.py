@@ -164,13 +164,31 @@ def _log_gaussian_density(
     """Evaluate the log of N(x; mean, cov)."""
     M = x.shape[0]
     diff = x - mean
-    sign, log_det = np.linalg.slogdet(cov)
-    if sign <= 0:
-        raise ValueError("Covariance matrix is not positive definite.")
+
+    try:
+        L = np.linalg.cholesky(cov)
+    except np.linalg.LinAlgError:
+        jitter_scale = float(np.trace(cov) / M)
+        if not np.isfinite(jitter_scale) or jitter_scale <= 0:
+            jitter_scale = 1.0
+        jitter = max(1e-12 * jitter_scale, 1e-12)
+
+        try:
+            L = np.linalg.cholesky(cov + jitter * np.eye(M))
+        except np.linalg.LinAlgError:
+            sign, log_det = np.linalg.slogdet(cov)
+            if sign <= 0 or not np.isfinite(log_det):
+                raise ValueError("Covariance matrix is not positive definite.") from None
+            quad = float(diff @ np.linalg.solve(cov, diff))
+            return float(-0.5 * M * np.log(2 * np.pi) - 0.5 * log_det - 0.5 * quad)
+
+    log_det = 2.0 * np.sum(np.log(np.diag(L)))
+    y = np.linalg.solve(L, diff)
+    quad = float(y @ y)
     return float(
         -0.5 * M * np.log(2 * np.pi)
         - 0.5 * log_det
-        -0.5 * diff @ np.linalg.solve(cov, diff)
+        - 0.5 * quad
     )
 
 
