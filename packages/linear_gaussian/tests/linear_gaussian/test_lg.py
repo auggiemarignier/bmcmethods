@@ -2,7 +2,12 @@
 
 import numpy as np
 import pytest
-from linear_gaussian import GaussianComponent, calc_log_evidence, calc_posterior_cov, calc_posterior_mean
+from linear_gaussian import (
+    GaussianComponent,
+    calc_log_evidence,
+    calc_posterior_cov,
+    calc_posterior_mean,
+)
 from linear_gaussian.lg import (
     _block_diag,
     _build_A_I,
@@ -14,7 +19,6 @@ from linear_gaussian.lg import (
     _calc_mu_eta,
 )
 
-
 # ---------------------------------------------------------------------------
 # GaussianComponent validation
 # ---------------------------------------------------------------------------
@@ -22,9 +26,7 @@ from linear_gaussian.lg import (
 
 class TestGaussianComponent:
     def test_valid_construction(self):
-        gc = GaussianComponent(
-            A=np.ones((3, 2)), mu=np.zeros(2), C=np.eye(2)
-        )
+        gc = GaussianComponent(A=np.ones((3, 2)), mu=np.zeros(2), C=np.eye(2))
         assert gc.A.shape == (3, 2)
         assert gc.mu.shape == (2,)
         assert gc.C.shape == (2, 2)
@@ -81,7 +83,9 @@ class TestBlockDiag:
 
 class TestCalcMuEta:
     def test_single_nuisance_identity(self):
-        nuisance = [GaussianComponent(A=np.eye(2), mu=np.array([1.0, 2.0]), C=np.eye(2))]
+        nuisance = [
+            GaussianComponent(A=np.eye(2), mu=np.array([1.0, 2.0]), C=np.eye(2))
+        ]
         result = _calc_mu_eta(nuisance, M=2)
         np.testing.assert_array_equal(result, np.array([1.0, 2.0]))
 
@@ -305,8 +309,12 @@ class TestInputValidation:
 class TestCalcPosteriorCov:
     def test_1d_known_result(self):
         """1D: sigma_prior=2, sigma_noise=1 => sigma_post = 0.8."""
-        inferred = [GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[4.0]]))]
-        nuisance = [GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))]
+        inferred = [
+            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[4.0]]))
+        ]
+        nuisance = [
+            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))
+        ]
         C_post = calc_posterior_cov(inferred, nuisance)
         np.testing.assert_allclose(C_post, np.array([[0.8]]))
 
@@ -361,8 +369,12 @@ class TestCalcPosteriorMean:
     def test_1d_known_result(self):
         """1D: prior N(0,4), noise N(0,1), d=1.5 => mu_post=1.2."""
         d = np.array([1.5])
-        inferred = [GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[4.0]]))]
-        nuisance = [GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))]
+        inferred = [
+            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[4.0]]))
+        ]
+        nuisance = [
+            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))
+        ]
         mu_post = calc_posterior_mean(d, inferred, nuisance)
         np.testing.assert_allclose(mu_post, np.array([1.2]))
 
@@ -387,8 +399,12 @@ class TestCalcPosteriorMean:
         """1D: posterior mean should be a weighted average of prior and data."""
         d = np.array([10.0])
         mu_prior = np.array([0.0])
-        inferred = [GaussianComponent(A=np.array([[1.0]]), mu=mu_prior, C=np.array([[1.0]]))]
-        nuisance = [GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))]
+        inferred = [
+            GaussianComponent(A=np.array([[1.0]]), mu=mu_prior, C=np.array([[1.0]]))
+        ]
+        nuisance = [
+            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))
+        ]
         mu_post = calc_posterior_mean(d, inferred, nuisance)
         assert mu_prior[0] < mu_post[0] < d[0]
 
@@ -396,8 +412,12 @@ class TestCalcPosteriorMean:
         """Nonzero nuisance mean shifts the effective observation."""
         d = np.array([3.0])
         mu_eta = np.array([2.0])  # nuisance contribution
-        inferred = [GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))]
-        nuisance = [GaussianComponent(A=np.array([[1.0]]), mu=mu_eta, C=np.array([[1.0]]))]
+        inferred = [
+            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))
+        ]
+        nuisance = [
+            GaussianComponent(A=np.array([[1.0]]), mu=mu_eta, C=np.array([[1.0]]))
+        ]
         mu_post = calc_posterior_mean(d, inferred, nuisance)
         # Effective d = d - mu_eta = 1.0, with C_I=1, C_eta=1: mu_post = 0.5
         np.testing.assert_allclose(mu_post, np.array([0.5]), atol=1e-12)
@@ -412,10 +432,13 @@ class TestCalcLogEvidence:
     def test_1d_known_result(self):
         """1D: d ~ N(0, C_I + C_eta) = N(0, 5). log p(1.5) = log N(1.5; 0, 5)."""
         d = np.array([1.5])
-        inferred = [GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[4.0]]))]
-        nuisance = [GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))]
+        inferred = [
+            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[4.0]]))
+        ]
+        nuisance = [
+            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))
+        ]
         log_Z = calc_log_evidence(d, inferred, nuisance)
-        C_marginal = np.array([[5.0]])
         expected = -0.5 * np.log(2 * np.pi * 5.0) - 0.5 * 1.5**2 / 5.0
         np.testing.assert_allclose(log_Z, expected, rtol=1e-6)
 
@@ -432,8 +455,12 @@ class TestCalcLogEvidence:
         """With nonzero prior mean, marginal mean shifts accordingly."""
         d = np.array([2.0])
         mu_prior = np.array([1.0])
-        inferred = [GaussianComponent(A=np.array([[1.0]]), mu=mu_prior, C=np.array([[1.0]]))]
-        nuisance = [GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))]
+        inferred = [
+            GaussianComponent(A=np.array([[1.0]]), mu=mu_prior, C=np.array([[1.0]]))
+        ]
+        nuisance = [
+            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))
+        ]
         log_Z = calc_log_evidence(d, inferred, nuisance)
         # d ~ N(A_I mu_I, A_I C_I A_I^T + C_eta) = N(1, 2)
         expected = -0.5 * np.log(4 * np.pi) - (2.0 - 1.0) ** 2 / 4.0
@@ -475,7 +502,9 @@ class TestEmptyInferred:
         nuisance = [GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))]
         log_Z_empty = calc_log_evidence(d, [], nuisance)
 
-        inferred_zero_A = [GaussianComponent(A=np.zeros((2, 2)), mu=np.zeros(2), C=np.eye(2))]
+        inferred_zero_A = [
+            GaussianComponent(A=np.zeros((2, 2)), mu=np.zeros(2), C=np.eye(2))
+        ]
         log_Z_zero_A = calc_log_evidence(d, inferred_zero_A, nuisance)
         np.testing.assert_allclose(log_Z_empty, log_Z_zero_A, rtol=1e-6)
 

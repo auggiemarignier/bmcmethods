@@ -37,6 +37,7 @@ class GaussianComponent:
     C: NDArrayFloat
 
     def __post_init__(self) -> None:
+        """Validate Gaussian component array dimensions and compatibility."""
         if self.A.ndim != 2:
             raise ValueError("A must be a 2D array")
         if self.mu.ndim != 1:
@@ -137,9 +138,7 @@ def _validate_inputs(
 ) -> None:
     """Validate that d, inferred and nuisance are mutually consistent."""
     if not inferred and not nuisance:
-        raise ValueError(
-            "At least one of inferred or nuisance must be non-empty."
-        )
+        raise ValueError("At least one of inferred or nuisance must be non-empty.")
     M = _infer_M(inferred, nuisance)
     for comp in inferred + nuisance:
         if comp.A.shape[0] != M:
@@ -248,9 +247,7 @@ def calc_posterior_mean(
         empty (degenerate noise-free model).
     """
     if not inferred:
-        raise ValueError(
-            "inferred must be non-empty to compute a posterior mean."
-        )
+        raise ValueError("inferred must be non-empty to compute a posterior mean.")
     if not nuisance:
         raise ValueError(
             "nuisance must be non-empty to compute the posterior mean; "
