@@ -1,5 +1,7 @@
 """Tests for linear_gaussian/lg.py."""
 
+import warnings
+
 import numpy as np
 import pytest
 from linear_gaussian import (
@@ -17,6 +19,7 @@ from linear_gaussian.lg import (
     _calc_h,
     _calc_Lambda,
     _calc_mu_eta,
+    _log_gaussian_density,
 )
 
 # ---------------------------------------------------------------------------
@@ -249,6 +252,35 @@ class TestCalcH:
         C_eta = np.eye(2)
         result = _calc_h(d, mu_I, C_I, A_I, mu_eta, C_eta)
         np.testing.assert_allclose(result, mu_I)
+
+
+def _make_ill_conditioned_cov(
+    m: int = 250, n: int = 20, scale: float = 1e20
+) -> np.ndarray:
+    """Construct a large, ill-conditioned SPD covariance matrix."""
+    rng = np.random.default_rng(0)
+    A = rng.normal(size=(m, n))
+    return A @ (scale * np.eye(n)) @ A.T + np.eye(m)
+
+
+class TestLogGaussianDensity:
+    def test_avoids_slogdet_for_ill_conditioned_spd_covariance(self, monkeypatch):
+        """Ill-conditioned SPD matrices should not require slogdet."""
+        cov = _make_ill_conditioned_cov()
+        x = np.zeros(cov.shape[0])
+        mean = np.zeros_like(x)
+
+        def fail_slogdet(_: np.ndarray) -> tuple[float, float]:
+            raise AssertionError("slogdet should not be used for SPD covariances")
+
+        monkeypatch.setattr(np.linalg, "slogdet", fail_slogdet)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            log_density = _log_gaussian_density(x, mean, cov)
+
+        assert np.isfinite(log_density)
+        assert not any(isinstance(w.message, RuntimeWarning) for w in caught)
 
 
 # ---------------------------------------------------------------------------
