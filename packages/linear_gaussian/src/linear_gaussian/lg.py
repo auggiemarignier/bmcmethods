@@ -9,7 +9,6 @@ where X_I is the inferred variable, A_I is the forward operator, and eta is
 the aggregate nuisance contribution.  Both X_I and eta are Gaussian.
 """
 
-import warnings
 from dataclasses import dataclass
 
 import numpy as np
@@ -177,9 +176,7 @@ def _log_gaussian_density(
         try:
             L = np.linalg.cholesky(cov + jitter * np.eye(M))
         except np.linalg.LinAlgError:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", RuntimeWarning)
-                sign, log_det = np.linalg.slogdet(cov)
+            sign, log_det = np.linalg.slogdet(cov)
             if sign <= 0 or not np.isfinite(log_det):
                 raise ValueError("Covariance matrix is not positive definite.") from None
             quad = float(diff @ np.linalg.solve(cov, diff))
