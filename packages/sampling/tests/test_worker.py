@@ -9,7 +9,6 @@ from sampling.likelihood._base import (
     ForwardBase,
     ForwardGradientBase,
     IdentityForward,
-    IdentityState,
     LikelihoodBase,
     NoForwardGradient,
 )

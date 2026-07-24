@@ -91,7 +91,6 @@ def evidence_from_ln_inverse(
     """Compute evidence from the inverse evidence.
 
     Returns:
-
         (double, double): Tuple containing the following.
 
             - evidence (double): Estimate of evidence.
@@ -100,7 +99,6 @@ def evidence_from_ln_inverse(
               evidence.
 
     Raises:
-
         ValueError: if inverse evidence or its variance overflows.
     """
 
@@ -129,7 +127,6 @@ def ln_evidence_from_ln_inverse(
     """Compute log_e of evidence from the inverse evidence.
 
     Returns:
-
         (double, double): Tuple containing the following.
 
             - ln_evidence (double): Estimate of log_e of evidence.
@@ -268,7 +265,6 @@ def _compute_ln_evidence_inv(
             per chain.
         n_samples (int): Total number of samples across all chains.
     Returns:
-
         (float): Log_e inverse evidence.
     """
     n_samples = n_samples_per_chain.sum()
@@ -369,12 +365,7 @@ def _evidence_inv_per_chain_diff(
     ln_ratio_per_chain: np.ndarray,
     n_samples_per_chain: np.ndarray,
 ) -> np.ndarray:
-    """Compute
-
-        rhohat_i - rhohat
-
-    where rhohat is the inverse evidence estimate and rhohat_i is the per-chain estimate.
-    """
+    """Compute rhohat_i - rhohat where rhohat is the inverse evidence estimate and rhohat_i is the per-chain estimate."""
     evidence_inv, evidence_inv_per_chain = _ln_ratio_per_chain_to_evidence_inv(
         ln_ratio_per_chain,
         n_samples_per_chain,

@@ -76,6 +76,7 @@ class NoForwardGradient(ForwardGradientBase[None]):
 @dataclass(frozen=True)
 class IdentityState:
     """Empty serialisable state for the identity forward model."""
+
     pass
 
 

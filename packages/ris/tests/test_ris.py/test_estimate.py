@@ -3,10 +3,10 @@ import unittest.mock as mock
 import harmonic.model as md
 import numpy as np
 import pytest
-
 from ris.estimate import (
     Shifting,
     _compute_harmonic_ratio,
+    _compute_kurtosis,
     _compute_ln_evidence_inv,
     _compute_ln_evidence_inv_var,
     _compute_n_effective,
@@ -14,7 +14,6 @@ from ris.estimate import (
     compute_harmonic_mean,
     evidence_from_ln_inverse,
     ln_evidence_from_ln_inverse,
-    _compute_kurtosis,
 )
 
 
