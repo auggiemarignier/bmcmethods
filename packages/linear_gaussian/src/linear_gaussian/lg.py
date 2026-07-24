@@ -146,6 +146,10 @@ def _validate_inputs(
                 f"All components must map to the same observation dimension M={M}, "
                 f"but found A with shape {comp.A.shape}."
             )
+    if d.ndim != 1:
+        raise ValueError(
+            f"d must be a 1D array, but has shape {d.shape}."
+        )
     if d.shape[0] != M:
         raise ValueError(
             f"d has dimension {d.shape[0]} but components map to dimension M={M}."
@@ -166,7 +170,7 @@ def _log_gaussian_density(
     return float(
         -0.5 * M * np.log(2 * np.pi)
         - 0.5 * log_det
-        - 0.5 * diff @ np.linalg.inv(cov) @ diff
+        -0.5 * diff @ np.linalg.solve(cov, diff)
     )
 
 
@@ -253,6 +257,7 @@ def calc_posterior_mean(
             "nuisance must be non-empty to compute the posterior mean; "
             "the noise-free case (nuisance=[]) leads to a degenerate posterior."
         )
+    _validate_inputs(d, inferred, nuisance)
 
     A_I = _build_A_I(inferred)
     mu_I = _build_mu_I(inferred)

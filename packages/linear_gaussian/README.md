@@ -9,7 +9,7 @@ $$d = \sum_{j=1}^{J} A_j X_j,$$
 
 where
 
-- $X_j \in \mathbb{R}^{N_j}$ is the amplitude of the (j^th^) physical
+- $X_j \in \mathbb{R}^{N_j}$ is the amplitude of the $j$-th physical
   process,
 
 - $A_j \in \mathbb{R}^{M \times N_j}$ is the linear mapping relating the
