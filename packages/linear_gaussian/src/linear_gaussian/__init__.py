@@ -1,5 +1,15 @@
-"""Calculation of the normalization constant for linear Gaussian models."""
+"""Bayesian analysis of linear combinations of Gaussian random variables."""
 
-from .lg import calc_Z
+from .lg import (
+    GaussianComponent,
+    calc_log_evidence,
+    calc_posterior_cov,
+    calc_posterior_mean,
+)
 
-__all__ = ["calc_Z"]
+__all__ = [
+    "GaussianComponent",
+    "calc_log_evidence",
+    "calc_posterior_cov",
+    "calc_posterior_mean",
+]
