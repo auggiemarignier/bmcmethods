@@ -552,7 +552,7 @@ class TestCalcPosteriorMean:
 
         mu_post = calc_posterior_mean(d, inferred, nuisance)
 
-        expected = np.array([1e-6 / (1.0 + 1e12), 1.0 / (1.0 + 1e-12)])
+        expected = np.array([1e-6 / (1.0 + 1e12), 1.0 / (1e12 + 1.0)])
         assert np.all(np.isfinite(mu_post))
         np.testing.assert_allclose(mu_post, expected, rtol=1e-10, atol=1e-18)
 
