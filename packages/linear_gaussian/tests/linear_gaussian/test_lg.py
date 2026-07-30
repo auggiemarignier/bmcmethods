@@ -20,6 +20,7 @@ from linear_gaussian.lg import (
     _calc_Lambda,
     _calc_mu_eta,
     _log_gaussian_density,
+    _solve_symmetric_system,
 )
 
 # ---------------------------------------------------------------------------
@@ -229,6 +230,18 @@ class TestCalcLambda:
         result = _calc_Lambda(C_I, A_I, C_eta)
         np.testing.assert_allclose(result, np.linalg.inv(C_I))
 
+    def test_ill_conditioned_spd_inputs_remain_finite(self):
+        """Ill-conditioned SPD covariances should still produce a finite precision."""
+        C_I = np.diag([1e-12, 1.0])
+        A_I = np.eye(2)
+        C_eta = np.diag([1.0, 1e12])
+
+        result = _calc_Lambda(C_I, A_I, C_eta)
+
+        expected = np.array([[1e12 + 1.0, 0.0], [0.0, 1.0 + 1e-12]])
+        assert np.all(np.isfinite(result))
+        np.testing.assert_allclose(result, expected, rtol=1e-12, atol=1e-12)
+
 
 class TestCalcH:
     def test_1d_known_result(self):
@@ -252,6 +265,34 @@ class TestCalcH:
         C_eta = np.eye(2)
         result = _calc_h(d, mu_I, C_I, A_I, mu_eta, C_eta)
         np.testing.assert_allclose(result, mu_I)
+
+
+class TestSolveSymmetricSystem:
+    def test_matches_dense_solve_without_inv(self, monkeypatch):
+        """The stabilized solve path should not rely on np.linalg.inv."""
+        matrix = np.array([[4.0, 1.0], [1.0, 3.0]])
+        rhs = np.array([1.0, -2.0])
+
+        def fail_inv(_: np.ndarray) -> np.ndarray:
+            raise AssertionError("np.linalg.inv should not be used")
+
+        monkeypatch.setattr(np.linalg, "inv", fail_inv)
+
+        result = _solve_symmetric_system(matrix, rhs)
+
+        expected = np.linalg.solve(matrix, rhs)
+        np.testing.assert_allclose(result, expected)
+
+    def test_singular_matrix_raises_clear_error(self):
+        """Singular covariance/precision matrices should raise a clear error."""
+        matrix = np.array([[1.0, 0.0], [0.0, 0.0]])
+        rhs = np.array([1.0, 2.0])
+
+        with pytest.raises(
+            ValueError,
+            match="Matrix is singular or not numerically positive definite",
+        ):
+            _solve_symmetric_system(matrix, rhs)
 
 
 class TestLogGaussianDensity:
@@ -419,6 +460,23 @@ class TestCalcPosteriorCov:
         C_post = calc_posterior_cov([i1, i2], [n])
         np.testing.assert_allclose(C_post, (4.0 / 5.0) * np.eye(2), atol=1e-12)
 
+    def test_singular_noise_covariance_raises_clear_error(self):
+        """Singular nuisance covariances should fail instead of inverting."""
+        inferred = [GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))]
+        nuisance = [
+            GaussianComponent(
+                A=np.eye(2),
+                mu=np.zeros(2),
+                C=np.array([[1.0, 0.0], [0.0, 0.0]]),
+            )
+        ]
+
+        with pytest.raises(
+            ValueError,
+            match="Matrix is singular or not numerically positive definite",
+        ):
+            calc_posterior_cov(inferred, nuisance)
+
 
 # ---------------------------------------------------------------------------
 # calc_posterior_mean
@@ -481,6 +539,22 @@ class TestCalcPosteriorMean:
         mu_post = calc_posterior_mean(d, inferred, nuisance)
         # Effective d = d - mu_eta = 1.0, with C_I=1, C_eta=1: mu_post = 0.5
         np.testing.assert_allclose(mu_post, np.array([0.5]), atol=1e-12)
+
+    def test_ill_conditioned_spd_inputs_remain_finite(self):
+        """Ill-conditioned SPD inputs should still yield a finite posterior mean."""
+        d = np.array([1e-6, 1.0])
+        inferred = [
+            GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.diag([1e-12, 1.0]))
+        ]
+        nuisance = [
+            GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.diag([1.0, 1e12]))
+        ]
+
+        mu_post = calc_posterior_mean(d, inferred, nuisance)
+
+        expected = np.array([1e-6 / (1.0 + 1e12), 1.0 / (1.0 + 1e-12)])
+        assert np.all(np.isfinite(mu_post))
+        np.testing.assert_allclose(mu_post, expected, rtol=1e-10, atol=1e-18)
 
 
 # ---------------------------------------------------------------------------

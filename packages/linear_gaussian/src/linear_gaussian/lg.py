@@ -97,15 +97,35 @@ def _build_C_I(inferred: list[GaussianComponent]) -> NDArrayFloat:
     return _block_diag([c.C for c in inferred])
 
 
+def _solve_symmetric_system(
+    matrix: NDArrayFloat,
+    rhs: NDArrayFloat,
+) -> NDArrayFloat:
+    """Solve a linear system for a covariance or precision matrix."""
+    try:
+        L = np.linalg.cholesky(matrix)
+    except np.linalg.LinAlgError:
+        try:
+            return np.linalg.solve(matrix, rhs)
+        except np.linalg.LinAlgError as exc:
+            raise ValueError(
+                "Matrix is singular or not numerically positive definite."
+            ) from exc
+
+    y = np.linalg.solve(L, rhs)
+    return np.linalg.solve(L.T, y)
+
+
 def _calc_Lambda(
     C_I: NDArrayFloat,
     A_I: NDArrayFloat,
     C_eta: NDArrayFloat,
 ) -> NDArrayFloat:
     """Compute the posterior precision Lambda = C_I^{-1} + A_I^T C_eta^{-1} A_I."""
-    C_I_inv = np.linalg.inv(C_I)
-    C_eta_inv = np.linalg.inv(C_eta)
-    return C_I_inv + A_I.T @ C_eta_inv @ A_I
+    identity = np.eye(C_I.shape[0], dtype=C_I.dtype)
+    C_I_inv = _solve_symmetric_system(C_I, identity)
+    C_eta_inv_A_I = _solve_symmetric_system(C_eta, A_I)
+    return C_I_inv + A_I.T @ C_eta_inv_A_I
 
 
 def _calc_h(
@@ -117,9 +137,9 @@ def _calc_h(
     C_eta: NDArrayFloat,
 ) -> NDArrayFloat:
     """Compute the information vector h = C_I^{-1} mu_I + A_I^T C_eta^{-1} (d - mu_eta)."""
-    C_I_inv = np.linalg.inv(C_I)
-    C_eta_inv = np.linalg.inv(C_eta)
-    return C_I_inv @ mu_I + A_I.T @ C_eta_inv @ (d - mu_eta)
+    C_I_inv_mu_I = _solve_symmetric_system(C_I, mu_I)
+    C_eta_inv_residual = _solve_symmetric_system(C_eta, d - mu_eta)
+    return C_I_inv_mu_I + A_I.T @ C_eta_inv_residual
 
 
 def _infer_M(
@@ -238,7 +258,8 @@ def calc_posterior_cov(
     C_eta = _calc_C_eta(nuisance, M)
 
     Lambda = _calc_Lambda(C_I, A_I, C_eta)
-    return np.linalg.inv(Lambda)
+    identity = np.eye(Lambda.shape[0], dtype=Lambda.dtype)
+    return _solve_symmetric_system(Lambda, identity)
 
 
 def calc_posterior_mean(
@@ -283,11 +304,10 @@ def calc_posterior_mean(
     M = A_I.shape[0]
     mu_eta = _calc_mu_eta(nuisance, M)
     C_eta = _calc_C_eta(nuisance, M)
-
     Lambda = _calc_Lambda(C_I, A_I, C_eta)
     h = _calc_h(d, mu_I, C_I, A_I, mu_eta, C_eta)
-    C_post = np.linalg.inv(Lambda)
-    return C_post @ h
+    h = _calc_h(d, mu_I, C_I, A_I, mu_eta, C_eta)
+    return _solve_symmetric_system(Lambda, h)
 
 
 def calc_log_evidence(
