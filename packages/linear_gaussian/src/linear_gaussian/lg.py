@@ -250,7 +250,6 @@ def calc_posterior_cov(
     A_I = _build_A_I(inferred)
     C_I = _build_C_I(inferred)
     M = A_I.shape[0]
-    mu_eta = _calc_mu_eta(nuisance, M)  # noqa: F841 – not needed here but kept for clarity
     C_eta = _calc_C_eta(nuisance, M)
 
     Lambda = _calc_Lambda(C_I, A_I, C_eta)
