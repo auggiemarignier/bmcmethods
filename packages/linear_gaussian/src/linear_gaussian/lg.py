@@ -247,14 +247,9 @@ def calc_posterior_cov(
             "the noise-free case (nuisance=[]) leads to a degenerate posterior."
         )
 
-    A_I = _build_A_I(inferred)
-    C_I = _build_C_I(inferred)
-    M = A_I.shape[0]
-    C_eta = _calc_C_eta(nuisance, M)
-
-    Lambda = _calc_Lambda(C_I, A_I, C_eta)
-    identity = np.eye(Lambda.shape[0], dtype=Lambda.dtype)
-    return _solve_symmetric_system(Lambda, identity)
+    prepared = _prepare_problem(inferred, nuisance)
+    identity = np.eye(prepared.Lambda.shape[0], dtype=prepared.Lambda.dtype)
+    return _solve_symmetric_system(prepared.Lambda, identity)
 
 
 def calc_posterior_mean(
@@ -293,15 +288,11 @@ def calc_posterior_mean(
         )
     _validate_inputs(d, inferred, nuisance)
 
-    A_I = _build_A_I(inferred)
-    mu_I = _build_mu_I(inferred)
-    C_I = _build_C_I(inferred)
-    M = A_I.shape[0]
-    mu_eta = _calc_mu_eta(nuisance, M)
-    C_eta = _calc_C_eta(nuisance, M)
-    Lambda = _calc_Lambda(C_I, A_I, C_eta)
-    h = _calc_h(d, mu_I, C_I, A_I, mu_eta, C_eta)
-    return _solve_symmetric_system(Lambda, h)
+    prepared = _prepare_problem(inferred, nuisance)
+    h = _calc_h(
+        d, prepared.mu_I, prepared.C_I, prepared.A_I, prepared.mu_eta, prepared.C_eta
+    )
+    return _solve_symmetric_system(prepared.Lambda, h)
 
 
 def calc_log_evidence(
@@ -342,28 +333,72 @@ def calc_log_evidence(
         If both ``inferred`` and ``nuisance`` are empty.
     """
     _validate_inputs(d, inferred, nuisance)
-
-    M = _infer_M(inferred, nuisance)
+    prepared = _prepare_problem(inferred, nuisance)
 
     if not inferred:
         # Only nuisance: d ~ N(mu_eta, C_eta)
-        mu_marginal = _calc_mu_eta(nuisance, M)
-        C_marginal = _calc_C_eta(nuisance, M)
+        mu_marginal = prepared.mu_eta
+        C_marginal = prepared.C_eta
     elif not nuisance:
         # Only inferred, no noise: d ~ N(A_I mu_I, A_I C_I A_I^T)
-        A_I = _build_A_I(inferred)
-        mu_I = _build_mu_I(inferred)
-        C_I = _build_C_I(inferred)
+        A_I = prepared.A_I
+        mu_I = prepared.mu_I
+        C_I = prepared.C_I
         mu_marginal = A_I @ mu_I
         C_marginal = A_I @ C_I @ A_I.T
     else:
         # General case
-        A_I = _build_A_I(inferred)
-        mu_I = _build_mu_I(inferred)
-        C_I = _build_C_I(inferred)
-        mu_eta = _calc_mu_eta(nuisance, M)
-        C_eta = _calc_C_eta(nuisance, M)
+        A_I = prepared.A_I
+        mu_I = prepared.mu_I
+        C_I = prepared.C_I
+        mu_eta = prepared.mu_eta
+        C_eta = prepared.C_eta
         mu_marginal = A_I @ mu_I + mu_eta
         C_marginal = A_I @ C_I @ A_I.T + C_eta
 
     return _log_gaussian_density(d, mu_marginal, C_marginal)
+
+
+# ---------------------------------------------------------------------------
+# Caching
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _PreparedProblem:
+    A_I: np.ndarray
+    C_I: np.ndarray
+    mu_I: np.ndarray
+    mu_eta: np.ndarray
+    C_eta: np.ndarray
+    Lambda: np.ndarray
+
+
+_CACHE: dict[tuple, _PreparedProblem] = {}
+
+
+def _prep_key(
+    inferred: list[GaussianComponent], nuisance: list[GaussianComponent]
+) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    return (tuple(id(c) for c in inferred), tuple(id(c) for c in nuisance))
+
+
+def _prepare_problem(
+    inferred: list[GaussianComponent], nuisance: list[GaussianComponent]
+) -> _PreparedProblem:
+    key = _prep_key(inferred, nuisance)
+    hit = _CACHE.get(key)
+    if hit is not None:
+        return hit
+
+    A_I = _build_A_I(inferred)
+    C_I = _build_C_I(inferred)
+    mu_I = _build_mu_I(inferred)
+    M = A_I.shape[0]
+    mu_eta = _calc_mu_eta(nuisance, M)
+    C_eta = _calc_C_eta(nuisance, M)
+    Lambda = _calc_Lambda(C_I, A_I, C_eta)
+
+    prepared = _PreparedProblem(A_I, C_I, mu_I, mu_eta, C_eta, Lambda)
+    _CACHE[key] = prepared
+    return prepared
