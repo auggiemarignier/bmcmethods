@@ -145,7 +145,7 @@ class TestBuildAI:
     def test_single_component(self):
         A = np.array([[1.0, 2.0], [3.0, 4.0]])
         inferred = [GaussianComponent(A=A, mu=np.zeros(2), C=np.eye(2))]
-        result = _build_A_I(inferred)
+        result = _build_A_I(inferred, 2)
         np.testing.assert_array_equal(result, A)
 
     def test_two_components_concatenated(self):
@@ -153,7 +153,7 @@ class TestBuildAI:
         A2 = np.array([[3.0], [4.0]])
         i1 = GaussianComponent(A=A1, mu=np.zeros(1), C=np.eye(1))
         i2 = GaussianComponent(A=A2, mu=np.zeros(1), C=np.eye(1))
-        result = _build_A_I([i1, i2])
+        result = _build_A_I([i1, i2], 2)
         expected = np.array([[1.0, 3.0], [2.0, 4.0]])
         np.testing.assert_array_equal(result, expected)
 
