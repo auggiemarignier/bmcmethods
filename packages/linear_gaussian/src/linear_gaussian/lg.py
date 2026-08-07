@@ -9,7 +9,7 @@ where X_I is the inferred variable, A_I is the forward operator, and eta is
 the aggregate nuisance contribution.  Both X_I and eta are Gaussian.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 from numpy.typing import NDArray
@@ -82,18 +82,24 @@ def _calc_C_eta(nuisance: list[GaussianComponent], M: int) -> NDArrayFloat:
     return np.sum([c.A @ c.C @ c.A.T for c in nuisance], axis=0)
 
 
-def _build_A_I(inferred: list[GaussianComponent]) -> NDArrayFloat:
+def _build_A_I(inferred: list[GaussianComponent], M: int) -> NDArrayFloat:
     """Build A_I = (A_1 | ... | A_k) by horizontal concatenation."""
+    if not inferred:
+        return np.zeros((M, 0))
     return np.hstack([c.A for c in inferred])
 
 
 def _build_mu_I(inferred: list[GaussianComponent]) -> NDArrayFloat:
     """Build mu_I = (mu_1; ...; mu_k) by vertical stacking."""
+    if not inferred:
+        return np.zeros(0)
     return np.concatenate([c.mu for c in inferred])
 
 
 def _build_C_I(inferred: list[GaussianComponent]) -> NDArrayFloat:
     """Build C_I = diag(C_1, ..., C_k) as a block-diagonal matrix."""
+    if not inferred:
+        return np.zeros((0, 0))
     return _block_diag([c.C for c in inferred])
 
 
@@ -366,12 +372,13 @@ def calc_log_evidence(
 
 @dataclass(frozen=True)
 class _PreparedProblem:
+    M: int
     A_I: np.ndarray
     C_I: np.ndarray
     mu_I: np.ndarray
     mu_eta: np.ndarray
     C_eta: np.ndarray
-    Lambda: np.ndarray
+    Lambda: np.ndarray | None = None
 
 
 _CACHE: dict[tuple, _PreparedProblem] = {}
@@ -391,14 +398,18 @@ def _prepare_problem(
     if hit is not None:
         return hit
 
-    A_I = _build_A_I(inferred)
+    M = _infer_M(inferred, nuisance)
+    A_I = _build_A_I(inferred, M)
     C_I = _build_C_I(inferred)
     mu_I = _build_mu_I(inferred)
-    M = A_I.shape[0]
     mu_eta = _calc_mu_eta(nuisance, M)
     C_eta = _calc_C_eta(nuisance, M)
-    Lambda = _calc_Lambda(C_I, A_I, C_eta)
+    prepared = _PreparedProblem(M, A_I, C_I, mu_I, mu_eta, C_eta)
 
-    prepared = _PreparedProblem(A_I, C_I, mu_I, mu_eta, C_eta, Lambda)
+    if inferred and nuisance:
+        # if either of inferred or nuisance is empty then we don't need Lambda, and in fact our defaults make some of these matrices singular.
+        Lambda = _calc_Lambda(C_I, A_I, C_eta)
+        prepared = replace(prepared, Lambda=Lambda)
+
     _CACHE[key] = prepared
     return prepared
