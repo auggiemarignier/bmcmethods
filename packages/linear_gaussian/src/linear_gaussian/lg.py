@@ -9,7 +9,10 @@ where X_I is the inferred variable, A_I is the forward operator, and eta is
 the aggregate nuisance contribution.  Both X_I and eta are Gaussian.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from functools import wraps
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -50,6 +53,46 @@ class GaussianComponent:
             raise ValueError("A columns and mu are incompatible")
 
 
+_CACHE: dict[Any, Any] = {}
+
+
+def _identity_key_for(obj: Any) -> tuple:
+    if isinstance(obj, np.ndarray):
+        return ("ndarray", id(obj))
+    if isinstance(obj, GaussianComponent):
+        return ("comp", id(obj))
+    if isinstance(obj, list | tuple):
+        return tuple(_identity_key_for(x) for x in obj)
+    return ("val", obj)
+
+
+def _make_identity_key(args, kwargs) -> tuple[tuple, tuple]:
+    return (
+        tuple(_identity_key_for(a) for a in args),
+        tuple(sorted((k, _identity_key_for(v)) for k, v in kwargs.items())),
+    )
+
+
+def id_cache(func: Callable):
+    """Decorator - identity-keyed, in process cache."""
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        key = (func.__name__, _make_identity_key(args, kwargs))
+        if key in _CACHE:
+            return _CACHE[key]
+        res = func(*args, **kwargs)
+        _CACHE[key] = res
+        return res
+
+    return wrapper
+
+
+def clear_cache() -> None:
+    """Clear the module cache."""
+    _CACHE.clear()
+
+
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
@@ -68,6 +111,7 @@ def _block_diag(matrices: list[NDArrayFloat]) -> NDArrayFloat:
     return result
 
 
+@id_cache
 def _calc_mu_eta(nuisance: list[GaussianComponent], M: int) -> NDArrayFloat:
     """Compute the nuisance mean mu_eta = sum_m A_m mu_m."""
     if not nuisance:
@@ -75,6 +119,7 @@ def _calc_mu_eta(nuisance: list[GaussianComponent], M: int) -> NDArrayFloat:
     return np.sum([c.A @ c.mu for c in nuisance], axis=0)
 
 
+@id_cache
 def _calc_C_eta(nuisance: list[GaussianComponent], M: int) -> NDArrayFloat:
     """Compute the nuisance covariance C_eta = sum_m A_m C_m A_m^T."""
     if not nuisance:
@@ -82,28 +127,37 @@ def _calc_C_eta(nuisance: list[GaussianComponent], M: int) -> NDArrayFloat:
     return np.sum([c.A @ c.C @ c.A.T for c in nuisance], axis=0)
 
 
+@id_cache
 def _build_A_I(inferred: list[GaussianComponent]) -> NDArrayFloat:
     """Build A_I = (A_1 | ... | A_k) by horizontal concatenation."""
     return np.hstack([c.A for c in inferred])
 
 
+@id_cache
 def _build_mu_I(inferred: list[GaussianComponent]) -> NDArrayFloat:
     """Build mu_I = (mu_1; ...; mu_k) by vertical stacking."""
     return np.concatenate([c.mu for c in inferred])
 
 
+@id_cache
 def _build_C_I(inferred: list[GaussianComponent]) -> NDArrayFloat:
     """Build C_I = diag(C_1, ..., C_k) as a block-diagonal matrix."""
     return _block_diag([c.C for c in inferred])
 
 
+@id_cache
+def _cholesky(matrix: NDArrayFloat) -> NDArrayFloat:
+    return np.linalg.cholesky(matrix)
+
+
+@id_cache
 def _solve_symmetric_system(
     matrix: NDArrayFloat,
     rhs: NDArrayFloat,
 ) -> NDArrayFloat:
     """Solve a linear system for a covariance or precision matrix."""
     try:
-        L = np.linalg.cholesky(matrix)
+        L = _cholesky(matrix)
     except np.linalg.LinAlgError:
         try:
             return np.linalg.solve(matrix, rhs)
@@ -116,6 +170,7 @@ def _solve_symmetric_system(
     return np.linalg.solve(L.T, y)
 
 
+@id_cache
 def _calc_Lambda(
     C_I: NDArrayFloat,
     A_I: NDArrayFloat,
@@ -128,6 +183,7 @@ def _calc_Lambda(
     return C_I_inv + A_I.T @ C_eta_inv_A_I
 
 
+@id_cache
 def _calc_h(
     d: NDArrayFloat,
     mu_I: NDArrayFloat,
@@ -142,6 +198,7 @@ def _calc_h(
     return C_I_inv_mu_I + A_I.T @ C_eta_inv_residual
 
 
+@id_cache
 def _infer_M(
     inferred: list[GaussianComponent],
     nuisance: list[GaussianComponent],
@@ -151,6 +208,7 @@ def _infer_M(
     return all_components[0].A.shape[0]
 
 
+@id_cache
 def _validate_inputs(
     d: NDArrayFloat,
     inferred: list[GaussianComponent],
@@ -174,6 +232,7 @@ def _validate_inputs(
         )
 
 
+@id_cache
 def _log_gaussian_density(
     x: NDArrayFloat,
     mean: NDArrayFloat,
@@ -184,7 +243,7 @@ def _log_gaussian_density(
     diff = x - mean
 
     try:
-        L = np.linalg.cholesky(cov)
+        L = _cholesky(cov)
     except np.linalg.LinAlgError:
         jitter_scale = float(np.trace(cov) / M)
         if not np.isfinite(jitter_scale) or jitter_scale <= 0:
@@ -192,7 +251,7 @@ def _log_gaussian_density(
         jitter = max(1e-12 * jitter_scale, 1e-12)
 
         try:
-            L = np.linalg.cholesky(cov + jitter * np.eye(M))
+            L = _cholesky(cov + jitter * np.eye(M))
         except np.linalg.LinAlgError:
             sign, log_det = np.linalg.slogdet(cov)
             if sign <= 0 or not np.isfinite(log_det):

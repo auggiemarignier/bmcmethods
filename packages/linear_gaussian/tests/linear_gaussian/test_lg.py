@@ -21,7 +21,14 @@ from linear_gaussian.lg import (
     _calc_mu_eta,
     _log_gaussian_density,
     _solve_symmetric_system,
+    clear_cache,
 )
+
+
+@pytest.fixture(autouse=True)
+def clear_cache_between_tests():
+    clear_cache()
+
 
 # ---------------------------------------------------------------------------
 # GaussianComponent validation
