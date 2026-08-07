@@ -208,7 +208,6 @@ def _infer_M(
     return all_components[0].A.shape[0]
 
 
-@id_cache
 def _validate_inputs(
     d: NDArrayFloat,
     inferred: list[GaussianComponent],
