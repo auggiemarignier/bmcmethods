@@ -167,9 +167,7 @@ def _validate_inputs(
                 f"but found A with shape {comp.A.shape}."
             )
     if d.ndim != 1:
-        raise ValueError(
-            f"d must be a 1D array, but has shape {d.shape}."
-        )
+        raise ValueError(f"d must be a 1D array, but has shape {d.shape}.")
     if d.shape[0] != M:
         raise ValueError(
             f"d has dimension {d.shape[0]} but components map to dimension M={M}."
@@ -198,18 +196,16 @@ def _log_gaussian_density(
         except np.linalg.LinAlgError:
             sign, log_det = np.linalg.slogdet(cov)
             if sign <= 0 or not np.isfinite(log_det):
-                raise ValueError("Covariance matrix is not positive definite.") from None
+                raise ValueError(
+                    "Covariance matrix is not positive definite."
+                ) from None
             quad = float(diff @ np.linalg.solve(cov, diff))
             return float(-0.5 * M * np.log(2 * np.pi) - 0.5 * log_det - 0.5 * quad)
 
     log_det = 2.0 * np.sum(np.log(np.diag(L)))
     y = np.linalg.solve(L, diff)
     quad = float(y @ y)
-    return float(
-        -0.5 * M * np.log(2 * np.pi)
-        - 0.5 * log_det
-        - 0.5 * quad
-    )
+    return float(-0.5 * M * np.log(2 * np.pi) - 0.5 * log_det - 0.5 * quad)
 
 
 # ---------------------------------------------------------------------------
@@ -305,7 +301,6 @@ def calc_posterior_mean(
     mu_eta = _calc_mu_eta(nuisance, M)
     C_eta = _calc_C_eta(nuisance, M)
     Lambda = _calc_Lambda(C_I, A_I, C_eta)
-    h = _calc_h(d, mu_I, C_I, A_I, mu_eta, C_eta)
     h = _calc_h(d, mu_I, C_I, A_I, mu_eta, C_eta)
     return _solve_symmetric_system(Lambda, h)
 
