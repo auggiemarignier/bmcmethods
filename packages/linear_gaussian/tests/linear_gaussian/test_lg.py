@@ -1,6 +1,7 @@
 """Tests for linear_gaussian/lg.py."""
 
 import warnings
+from dataclasses import FrozenInstanceError
 
 import numpy as np
 import pytest
@@ -54,6 +55,23 @@ class TestGaussianComponent:
     def test_A_columns_must_match_mu(self):
         with pytest.raises(ValueError, match="A columns and mu are incompatible"):
             GaussianComponent(A=np.ones((3, 4)), mu=np.zeros(2), C=np.eye(2))
+
+    def _make_gc(self):
+        return GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))
+
+    def test_dataclass_is_frozen(self):
+        gc = self._make_gc()
+        with pytest.raises(FrozenInstanceError):
+            gc.A = np.zeros((2, 2))
+
+    def test_internal_arrays_are_readonly(self):
+        gc = self._make_gc()
+        assert gc.A.flags.writeable is False
+        assert gc.mu.flags.writeable is False
+        assert gc.C.flags.writeable is False
+
+        with pytest.raises(ValueError):
+            gc.A[0, 0] = 1.0
 
 
 # ---------------------------------------------------------------------------

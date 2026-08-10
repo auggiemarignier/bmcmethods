@@ -17,9 +17,11 @@ from numpy.typing import NDArray
 type NDArrayFloat = NDArray[np.float64]
 
 
-@dataclass
+@dataclass(frozen=True)
 class GaussianComponent:
     """A single Gaussian component in the linear-Gaussian model.
+
+    This is a frozen dataclass and the internal arrays are read-only for caching safety.
 
     Parameters
     ----------
@@ -38,16 +40,28 @@ class GaussianComponent:
 
     def __post_init__(self) -> None:
         """Validate Gaussian component array dimensions and compatibility."""
-        if self.A.ndim != 2:
+
+        A = np.array(self.A, copy=True)
+        mu = np.array(self.mu, copy=True)
+        C = np.array(self.C, copy=True)
+
+        if A.ndim != 2:
             raise ValueError("A must be a 2D array")
-        if self.mu.ndim != 1:
+        if mu.ndim != 1:
             raise ValueError("mu must be a 1D array")
-        if self.C.ndim != 2 or self.C.shape[0] != self.C.shape[1]:
+        if C.ndim != 2 or C.shape[0] != C.shape[1]:
             raise ValueError("C must be a 2D square matrix")
-        if self.mu.shape[0] != self.C.shape[0]:
+        if mu.shape[0] != C.shape[0]:
             raise ValueError("mu and C dimensions are incompatible")
-        if self.A.shape[1] != self.mu.shape[0]:
+        if A.shape[1] != mu.shape[0]:
             raise ValueError("A columns and mu are incompatible")
+
+        A.setflags(write=False)
+        mu.setflags(write=False)
+        C.setflags(write=False)
+        object.__setattr__(self, "A", A)
+        object.__setattr__(self, "mu", mu)
+        object.__setattr__(self, "C", C)
 
 
 # ---------------------------------------------------------------------------
