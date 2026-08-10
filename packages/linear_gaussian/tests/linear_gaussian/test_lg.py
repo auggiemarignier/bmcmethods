@@ -157,6 +157,10 @@ class TestBuildAI:
         expected = np.array([[1.0, 3.0], [2.0, 4.0]])
         np.testing.assert_array_equal(result, expected)
 
+    def test_empty_inferred_returns_zero_columns(self):
+        result = _build_A_I([], 3)
+        assert result.shape == (3, 0)
+
 
 class TestBuildMuI:
     def test_single_component(self):
