@@ -9,7 +9,9 @@ where X_I is the inferred variable, A_I is the forward operator, and eta is
 the aggregate nuisance contribution.  Both X_I and eta are Gaussian.
 """
 
+import uuid
 from dataclasses import dataclass, replace
+from weakref import ref
 
 import numpy as np
 from numpy.typing import NDArray
@@ -400,12 +402,68 @@ class _PreparedProblem:
 
 
 _CACHE: dict[tuple, _PreparedProblem] = {}
+_ID_TOKEN_MAP: dict[int, tuple[ref, str]] = {}
+
+
+def _token_for(comp: GaussianComponent) -> str:
+    """
+    Map from object id() → (weakref, token) used to derive stable, cheap per-instance keys for the cache without changing the GaussianComponent dataclass.
+
+    Why this exists
+
+        We need a stable, fast key for each live component instance so the cache can reuse prepared results without hashing large NumPy arrays.
+        Using id() alone is unsafe because Python can reuse integer object ids after an object is garbage-collected; that could cause a new object to accidentally reuse an old cache entry.
+
+    What is stored
+
+        Key: id(comp) (an integer).
+        Value: a tuple (ref, token) where:
+            ref is a weakref.ref pointing to the original object, with a callback that removes the mapping when the object is collected.
+            token is a short stable identifier (a UUID hex string) generated once for the object and used as the actual cache key component.
+
+    How it works (simple)
+
+        When we need a token for a component, we look up _ID_TOKEN_MAP[id(comp)].
+        If the entry exists and ref() still returns the same object, we reuse token.
+        If the entry is missing or ref() is None/not the same object, we create a new token and store (weakref.ref(comp, _cleanup_callback), token) under id(comp).
+        The weakref callback removes the dictionary entry automatically when the object is garbage-collected, avoiding memory leaks and stale mappings.
+
+    Important properties / caveats
+
+        No heavy array/content hashing is performed — only id() checks and one-time UUID generation per live instance.
+        The map does not keep strong references to components (the weakref avoids that).
+        This design prevents id-reuse bugs because we validate the weakref referent before returning a stored token.
+        Not thread-safe: if you access _ID_TOKEN_MAP concurrently from multiple threads, race conditions may occur. Add a simple threading.Lock around _token_for if multi-threaded access is expected.
+        Tokens are stable only for the lifetime of the instance; they do not persist across process restarts or after the object is collected.
+
+    Example (what _token_for(comp) guarantees)
+
+        For the same live comp object: repeated _token_for(comp) calls return the same token.
+        For a different object that happens to have the same id() (after GC/reuse): a new token will be generated and stored — the old token will not be reused.
+    """
+    key = id(comp)
+    entry = _ID_TOKEN_MAP.get(key)
+    if entry:
+        r, token = entry
+        obj = r()
+        if obj is comp:
+            return token
+    token = uuid.uuid4().hex
+    # remove mapping when object is GC'd
+    _ID_TOKEN_MAP[key] = (
+        ref(comp, lambda _r, k=key: _ID_TOKEN_MAP.pop(k, None)),
+        token,
+    )
+    return token
 
 
 def _prep_key(
     inferred: list[GaussianComponent], nuisance: list[GaussianComponent]
-) -> tuple[tuple[int, ...], tuple[int, ...]]:
-    return (tuple(id(c) for c in inferred), tuple(id(c) for c in nuisance))
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    return (
+        tuple(_token_for(c) for c in inferred),
+        tuple(_token_for(c) for c in nuisance),
+    )
 
 
 def _prepare_problem(
