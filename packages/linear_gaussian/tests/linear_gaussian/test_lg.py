@@ -1,6 +1,7 @@
 """Tests for linear_gaussian/lg.py."""
 
 import warnings
+from dataclasses import FrozenInstanceError
 
 import numpy as np
 import pytest
@@ -54,6 +55,23 @@ class TestGaussianComponent:
     def test_A_columns_must_match_mu(self):
         with pytest.raises(ValueError, match="A columns and mu are incompatible"):
             GaussianComponent(A=np.ones((3, 4)), mu=np.zeros(2), C=np.eye(2))
+
+    def _make_gc(self):
+        return GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))
+
+    def test_dataclass_is_frozen(self):
+        gc = self._make_gc()
+        with pytest.raises(FrozenInstanceError):
+            gc.A = np.zeros((2, 2))
+
+    def test_internal_arrays_are_readonly(self):
+        gc = self._make_gc()
+        assert gc.A.flags.writeable is False
+        assert gc.mu.flags.writeable is False
+        assert gc.C.flags.writeable is False
+
+        with pytest.raises(ValueError):
+            gc.A[0, 0] = 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +163,7 @@ class TestBuildAI:
     def test_single_component(self):
         A = np.array([[1.0, 2.0], [3.0, 4.0]])
         inferred = [GaussianComponent(A=A, mu=np.zeros(2), C=np.eye(2))]
-        result = _build_A_I(inferred)
+        result = _build_A_I(inferred, 2)
         np.testing.assert_array_equal(result, A)
 
     def test_two_components_concatenated(self):
@@ -153,9 +171,13 @@ class TestBuildAI:
         A2 = np.array([[3.0], [4.0]])
         i1 = GaussianComponent(A=A1, mu=np.zeros(1), C=np.eye(1))
         i2 = GaussianComponent(A=A2, mu=np.zeros(1), C=np.eye(1))
-        result = _build_A_I([i1, i2])
+        result = _build_A_I([i1, i2], 2)
         expected = np.array([[1.0, 3.0], [2.0, 4.0]])
         np.testing.assert_array_equal(result, expected)
+
+    def test_empty_inferred_returns_zero_columns(self):
+        result = _build_A_I([], 3)
+        assert result.shape == (3, 0)
 
 
 class TestBuildMuI:

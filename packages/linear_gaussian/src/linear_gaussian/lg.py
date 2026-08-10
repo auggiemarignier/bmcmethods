@@ -9,7 +9,9 @@ where X_I is the inferred variable, A_I is the forward operator, and eta is
 the aggregate nuisance contribution.  Both X_I and eta are Gaussian.
 """
 
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, replace
+from weakref import ref
 
 import numpy as np
 from numpy.typing import NDArray
@@ -17,9 +19,11 @@ from numpy.typing import NDArray
 type NDArrayFloat = NDArray[np.float64]
 
 
-@dataclass
+@dataclass(frozen=True)
 class GaussianComponent:
     """A single Gaussian component in the linear-Gaussian model.
+
+    This is a frozen dataclass and the internal arrays are read-only for caching safety.
 
     Parameters
     ----------
@@ -38,16 +42,28 @@ class GaussianComponent:
 
     def __post_init__(self) -> None:
         """Validate Gaussian component array dimensions and compatibility."""
-        if self.A.ndim != 2:
+
+        A = np.array(self.A, copy=True)
+        mu = np.array(self.mu, copy=True)
+        C = np.array(self.C, copy=True)
+
+        if A.ndim != 2:
             raise ValueError("A must be a 2D array")
-        if self.mu.ndim != 1:
+        if mu.ndim != 1:
             raise ValueError("mu must be a 1D array")
-        if self.C.ndim != 2 or self.C.shape[0] != self.C.shape[1]:
+        if C.ndim != 2 or C.shape[0] != C.shape[1]:
             raise ValueError("C must be a 2D square matrix")
-        if self.mu.shape[0] != self.C.shape[0]:
+        if mu.shape[0] != C.shape[0]:
             raise ValueError("mu and C dimensions are incompatible")
-        if self.A.shape[1] != self.mu.shape[0]:
+        if A.shape[1] != mu.shape[0]:
             raise ValueError("A columns and mu are incompatible")
+
+        A.setflags(write=False)
+        mu.setflags(write=False)
+        C.setflags(write=False)
+        object.__setattr__(self, "A", A)
+        object.__setattr__(self, "mu", mu)
+        object.__setattr__(self, "C", C)
 
 
 # ---------------------------------------------------------------------------
@@ -82,18 +98,24 @@ def _calc_C_eta(nuisance: list[GaussianComponent], M: int) -> NDArrayFloat:
     return np.sum([c.A @ c.C @ c.A.T for c in nuisance], axis=0)
 
 
-def _build_A_I(inferred: list[GaussianComponent]) -> NDArrayFloat:
+def _build_A_I(inferred: list[GaussianComponent], M: int) -> NDArrayFloat:
     """Build A_I = (A_1 | ... | A_k) by horizontal concatenation."""
+    if not inferred:
+        return np.zeros((M, 0))
     return np.hstack([c.A for c in inferred])
 
 
 def _build_mu_I(inferred: list[GaussianComponent]) -> NDArrayFloat:
     """Build mu_I = (mu_1; ...; mu_k) by vertical stacking."""
+    if not inferred:
+        return np.zeros(0)
     return np.concatenate([c.mu for c in inferred])
 
 
 def _build_C_I(inferred: list[GaussianComponent]) -> NDArrayFloat:
     """Build C_I = diag(C_1, ..., C_k) as a block-diagonal matrix."""
+    if not inferred:
+        return np.zeros((0, 0))
     return _block_diag([c.C for c in inferred])
 
 
@@ -167,9 +189,7 @@ def _validate_inputs(
                 f"but found A with shape {comp.A.shape}."
             )
     if d.ndim != 1:
-        raise ValueError(
-            f"d must be a 1D array, but has shape {d.shape}."
-        )
+        raise ValueError(f"d must be a 1D array, but has shape {d.shape}.")
     if d.shape[0] != M:
         raise ValueError(
             f"d has dimension {d.shape[0]} but components map to dimension M={M}."
@@ -198,18 +218,16 @@ def _log_gaussian_density(
         except np.linalg.LinAlgError:
             sign, log_det = np.linalg.slogdet(cov)
             if sign <= 0 or not np.isfinite(log_det):
-                raise ValueError("Covariance matrix is not positive definite.") from None
+                raise ValueError(
+                    "Covariance matrix is not positive definite."
+                ) from None
             quad = float(diff @ np.linalg.solve(cov, diff))
             return float(-0.5 * M * np.log(2 * np.pi) - 0.5 * log_det - 0.5 * quad)
 
     log_det = 2.0 * np.sum(np.log(np.diag(L)))
     y = np.linalg.solve(L, diff)
     quad = float(y @ y)
-    return float(
-        -0.5 * M * np.log(2 * np.pi)
-        - 0.5 * log_det
-        - 0.5 * quad
-    )
+    return float(-0.5 * M * np.log(2 * np.pi) - 0.5 * log_det - 0.5 * quad)
 
 
 # ---------------------------------------------------------------------------
@@ -251,15 +269,11 @@ def calc_posterior_cov(
             "the noise-free case (nuisance=[]) leads to a degenerate posterior."
         )
 
-    A_I = _build_A_I(inferred)
-    C_I = _build_C_I(inferred)
-    M = A_I.shape[0]
-    mu_eta = _calc_mu_eta(nuisance, M)  # noqa: F841 – not needed here but kept for clarity
-    C_eta = _calc_C_eta(nuisance, M)
-
-    Lambda = _calc_Lambda(C_I, A_I, C_eta)
-    identity = np.eye(Lambda.shape[0], dtype=Lambda.dtype)
-    return _solve_symmetric_system(Lambda, identity)
+    prepared = _prepare_problem(inferred, nuisance)
+    if prepared.Lambda is None:
+        raise RuntimeError("_prepare_problem did not compute Lambda.")
+    identity = np.eye(prepared.Lambda.shape[0], dtype=prepared.Lambda.dtype)
+    return _solve_symmetric_system(prepared.Lambda, identity)
 
 
 def calc_posterior_mean(
@@ -298,16 +312,13 @@ def calc_posterior_mean(
         )
     _validate_inputs(d, inferred, nuisance)
 
-    A_I = _build_A_I(inferred)
-    mu_I = _build_mu_I(inferred)
-    C_I = _build_C_I(inferred)
-    M = A_I.shape[0]
-    mu_eta = _calc_mu_eta(nuisance, M)
-    C_eta = _calc_C_eta(nuisance, M)
-    Lambda = _calc_Lambda(C_I, A_I, C_eta)
-    h = _calc_h(d, mu_I, C_I, A_I, mu_eta, C_eta)
-    h = _calc_h(d, mu_I, C_I, A_I, mu_eta, C_eta)
-    return _solve_symmetric_system(Lambda, h)
+    prepared = _prepare_problem(inferred, nuisance)
+    if prepared.Lambda is None:
+        raise RuntimeError("_prepare_problem did not compute Lambda.")
+    h = _calc_h(
+        d, prepared.mu_I, prepared.C_I, prepared.A_I, prepared.mu_eta, prepared.C_eta
+    )
+    return _solve_symmetric_system(prepared.Lambda, h)
 
 
 def calc_log_evidence(
@@ -348,28 +359,135 @@ def calc_log_evidence(
         If both ``inferred`` and ``nuisance`` are empty.
     """
     _validate_inputs(d, inferred, nuisance)
-
-    M = _infer_M(inferred, nuisance)
+    prepared = _prepare_problem(inferred, nuisance)
 
     if not inferred:
         # Only nuisance: d ~ N(mu_eta, C_eta)
-        mu_marginal = _calc_mu_eta(nuisance, M)
-        C_marginal = _calc_C_eta(nuisance, M)
+        mu_marginal = prepared.mu_eta
+        C_marginal = prepared.C_eta
     elif not nuisance:
         # Only inferred, no noise: d ~ N(A_I mu_I, A_I C_I A_I^T)
-        A_I = _build_A_I(inferred)
-        mu_I = _build_mu_I(inferred)
-        C_I = _build_C_I(inferred)
+        A_I = prepared.A_I
+        mu_I = prepared.mu_I
+        C_I = prepared.C_I
         mu_marginal = A_I @ mu_I
         C_marginal = A_I @ C_I @ A_I.T
     else:
         # General case
-        A_I = _build_A_I(inferred)
-        mu_I = _build_mu_I(inferred)
-        C_I = _build_C_I(inferred)
-        mu_eta = _calc_mu_eta(nuisance, M)
-        C_eta = _calc_C_eta(nuisance, M)
+        A_I = prepared.A_I
+        mu_I = prepared.mu_I
+        C_I = prepared.C_I
+        mu_eta = prepared.mu_eta
+        C_eta = prepared.C_eta
         mu_marginal = A_I @ mu_I + mu_eta
         C_marginal = A_I @ C_I @ A_I.T + C_eta
 
     return _log_gaussian_density(d, mu_marginal, C_marginal)
+
+
+# ---------------------------------------------------------------------------
+# Caching
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _PreparedProblem:
+    M: int
+    A_I: np.ndarray
+    C_I: np.ndarray
+    mu_I: np.ndarray
+    mu_eta: np.ndarray
+    C_eta: np.ndarray
+    Lambda: np.ndarray | None = None
+
+
+_CACHE: dict[tuple, _PreparedProblem] = {}
+_ID_TOKEN_MAP: dict[int, tuple[ref, str]] = {}
+
+
+def _token_for(comp: GaussianComponent) -> str:
+    """
+    Map from object id() → (weakref, token) used to derive stable, cheap per-instance keys for the cache without changing the GaussianComponent dataclass.
+
+    Why this exists
+
+        We need a stable, fast key for each live component instance so the cache can reuse prepared results without hashing large NumPy arrays.
+        Using id() alone is unsafe because Python can reuse integer object ids after an object is garbage-collected; that could cause a new object to accidentally reuse an old cache entry.
+
+    What is stored
+
+        Key: id(comp) (an integer).
+        Value: a tuple (ref, token) where:
+            ref is a weakref.ref pointing to the original object, with a callback that removes the mapping when the object is collected.
+            token is a short stable identifier (a UUID hex string) generated once for the object and used as the actual cache key component.
+
+    How it works (simple)
+
+        When we need a token for a component, we look up _ID_TOKEN_MAP[id(comp)].
+        If the entry exists and ref() still returns the same object, we reuse token.
+        If the entry is missing or ref() is None/not the same object, we create a new token and store (weakref.ref(comp, _cleanup_callback), token) under id(comp).
+        The weakref callback removes the dictionary entry automatically when the object is garbage-collected, avoiding memory leaks and stale mappings.
+
+    Important properties / caveats
+
+        No heavy array/content hashing is performed — only id() checks and one-time UUID generation per live instance.
+        The map does not keep strong references to components (the weakref avoids that).
+        This design prevents id-reuse bugs because we validate the weakref referent before returning a stored token.
+        Not thread-safe: if you access _ID_TOKEN_MAP concurrently from multiple threads, race conditions may occur. Add a simple threading.Lock around _token_for if multi-threaded access is expected.
+        Tokens are stable only for the lifetime of the instance; they do not persist across process restarts or after the object is collected.
+
+    Example (what _token_for(comp) guarantees)
+
+        For the same live comp object: repeated _token_for(comp) calls return the same token.
+        For a different object that happens to have the same id() (after GC/reuse): a new token will be generated and stored — the old token will not be reused.
+    """
+    key = id(comp)
+    entry = _ID_TOKEN_MAP.get(key)
+    if entry:
+        r, token = entry
+        obj = r()
+        if obj is comp:
+            return token
+    token = uuid.uuid4().hex
+    # remove mapping when object is GC'd
+    _ID_TOKEN_MAP[key] = (
+        ref(comp, lambda _r, k=key: _ID_TOKEN_MAP.pop(k, None)),
+        token,
+    )
+    return token
+
+
+def _prep_key(
+    inferred: list[GaussianComponent], nuisance: list[GaussianComponent]
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    return (
+        tuple(_token_for(c) for c in inferred),
+        tuple(_token_for(c) for c in nuisance),
+    )
+
+
+def _prepare_problem(
+    inferred: list[GaussianComponent], nuisance: list[GaussianComponent]
+) -> _PreparedProblem:
+    key = _prep_key(inferred, nuisance)
+    hit = _CACHE.get(key)
+    if hit is not None:
+        return hit
+
+    M = _infer_M(inferred, nuisance)
+    A_I = _build_A_I(inferred, M)
+    C_I = _build_C_I(inferred)
+    mu_I = _build_mu_I(inferred)
+    mu_eta = _calc_mu_eta(nuisance, M)
+    C_eta = _calc_C_eta(nuisance, M)
+    prepared = _PreparedProblem(M, A_I, C_I, mu_I, mu_eta, C_eta)
+
+    if inferred and nuisance:
+        # if either of inferred or nuisance is empty then we don't need Lambda, and in fact our defaults make some of these matrices singular.
+        Lambda = _calc_Lambda(C_I, A_I, C_eta)
+        prepared = replace(prepared, Lambda=Lambda)
+
+    if len(_CACHE) >= 128:
+        _CACHE.pop(next(iter(_CACHE)))
+    _CACHE[key] = prepared
+    return prepared
