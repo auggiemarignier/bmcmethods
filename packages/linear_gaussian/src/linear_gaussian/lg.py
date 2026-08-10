@@ -411,5 +411,7 @@ def _prepare_problem(
         Lambda = _calc_Lambda(C_I, A_I, C_eta)
         prepared = replace(prepared, Lambda=Lambda)
 
+    if len(_CACHE) >= 128:
+        _CACHE.pop(next(iter(_CACHE)))
     _CACHE[key] = prepared
     return prepared
