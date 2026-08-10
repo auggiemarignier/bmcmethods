@@ -254,6 +254,8 @@ def calc_posterior_cov(
         )
 
     prepared = _prepare_problem(inferred, nuisance)
+    if prepared.Lambda is None:
+        raise RuntimeError("_prepare_problem did not compute Lambda.")
     identity = np.eye(prepared.Lambda.shape[0], dtype=prepared.Lambda.dtype)
     return _solve_symmetric_system(prepared.Lambda, identity)
 
@@ -295,6 +297,8 @@ def calc_posterior_mean(
     _validate_inputs(d, inferred, nuisance)
 
     prepared = _prepare_problem(inferred, nuisance)
+    if prepared.Lambda is None:
+        raise RuntimeError("_prepare_problem did not compute Lambda.")
     h = _calc_h(
         d, prepared.mu_I, prepared.C_I, prepared.A_I, prepared.mu_eta, prepared.C_eta
     )
