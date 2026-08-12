@@ -305,6 +305,21 @@ class TestSolveSymmetricSystem:
         expected = np.linalg.solve(matrix, rhs)
         np.testing.assert_allclose(result, expected)
 
+    def test_uses_precomputed_cholesky_without_refactorizing(self, monkeypatch):
+        matrix = np.array([[4.0, 1.0], [1.0, 3.0]])
+        rhs = np.array([1.0, -2.0])
+        L = np.linalg.cholesky(matrix)
+
+        def fail_cholesky(_: np.ndarray) -> np.ndarray:
+            raise AssertionError("np.linalg.cholesky should not be used")
+
+        monkeypatch.setattr(np.linalg, "cholesky", fail_cholesky)
+
+        result = _solve_symmetric_system(L, matrix, rhs)
+
+        expected = np.linalg.solve(matrix, rhs)
+        np.testing.assert_allclose(result, expected)
+
     def test_singular_matrix_raises_clear_error(self):
         """Singular covariance/precision matrices should raise a clear error."""
         matrix = np.array([[1.0, 0.0], [0.0, 0.0]])
