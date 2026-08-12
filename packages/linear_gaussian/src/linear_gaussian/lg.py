@@ -9,8 +9,9 @@ where X_I is the inferred variable, A_I is the forward operator, and eta is
 the aggregate nuisance contribution.  Both X_I and eta are Gaussian.
 """
 
+import contextlib
 import uuid
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field
 from weakref import ref
 
 import numpy as np
@@ -119,13 +120,19 @@ def _build_C_I(inferred: list[GaussianComponent]) -> NDArrayFloat:
     return _block_diag([c.C for c in inferred])
 
 
+def _solve_cholesky(L: NDArrayFloat, rhs: NDArrayFloat) -> NDArrayFloat:
+    y = np.linalg.solve(L, rhs)
+    return np.linalg.solve(L.T, y)
+
+
 def _solve_symmetric_system(
-    matrix: NDArrayFloat,
-    rhs: NDArrayFloat,
+    L: NDArrayFloat | None, matrix: NDArrayFloat, rhs: NDArrayFloat
 ) -> NDArrayFloat:
-    """Solve a linear system for a covariance or precision matrix."""
+    if L is not None:
+        return _solve_cholesky(L, rhs)
+
     try:
-        L = np.linalg.cholesky(matrix)
+        L_chol = np.linalg.cholesky(matrix)
     except np.linalg.LinAlgError:
         try:
             return np.linalg.solve(matrix, rhs)
@@ -133,20 +140,21 @@ def _solve_symmetric_system(
             raise ValueError(
                 "Matrix is singular or not numerically positive definite."
             ) from exc
-
-    y = np.linalg.solve(L, rhs)
-    return np.linalg.solve(L.T, y)
+    else:
+        return _solve_cholesky(L_chol, rhs)
 
 
 def _calc_Lambda(
     C_I: NDArrayFloat,
     A_I: NDArrayFloat,
     C_eta: NDArrayFloat,
+    L_C_I: NDArrayFloat | None = None,
+    L_C_eta: NDArrayFloat | None = None,
 ) -> NDArrayFloat:
     """Compute the posterior precision Lambda = C_I^{-1} + A_I^T C_eta^{-1} A_I."""
     identity = np.eye(C_I.shape[0], dtype=C_I.dtype)
-    C_I_inv = _solve_symmetric_system(C_I, identity)
-    C_eta_inv_A_I = _solve_symmetric_system(C_eta, A_I)
+    C_I_inv = _solve_symmetric_system(L_C_I, C_I, identity)
+    C_eta_inv_A_I = _solve_symmetric_system(L_C_eta, C_eta, A_I)
     return C_I_inv + A_I.T @ C_eta_inv_A_I
 
 
@@ -157,10 +165,15 @@ def _calc_h(
     A_I: NDArrayFloat,
     mu_eta: NDArrayFloat,
     C_eta: NDArrayFloat,
+    L_C_I: NDArrayFloat | None = None,
+    L_C_eta: NDArrayFloat | None = None,
 ) -> NDArrayFloat:
-    """Compute the information vector h = C_I^{-1} mu_I + A_I^T C_eta^{-1} (d - mu_eta)."""
-    C_I_inv_mu_I = _solve_symmetric_system(C_I, mu_I)
-    C_eta_inv_residual = _solve_symmetric_system(C_eta, d - mu_eta)
+    """Compute the information vector h = C_I^{-1} mu_I + A_I^T C_eta^{-1} (d - mu_eta).
+
+    If Cholesky factors are provided they will be used for the solves.
+    """
+    C_I_inv_mu_I = _solve_symmetric_system(L_C_I, C_I, mu_I)
+    C_eta_inv_residual = _solve_symmetric_system(L_C_eta, C_eta, d - mu_eta)
     return C_I_inv_mu_I + A_I.T @ C_eta_inv_residual
 
 
@@ -273,7 +286,7 @@ def calc_posterior_cov(
     if prepared.Lambda is None:
         raise RuntimeError("_prepare_problem did not compute Lambda.")
     identity = np.eye(prepared.Lambda.shape[0], dtype=prepared.Lambda.dtype)
-    return _solve_symmetric_system(prepared.Lambda, identity)
+    return _solve_symmetric_system(prepared.L_Lambda, prepared.Lambda, identity)
 
 
 def calc_posterior_mean(
@@ -316,9 +329,16 @@ def calc_posterior_mean(
     if prepared.Lambda is None:
         raise RuntimeError("_prepare_problem did not compute Lambda.")
     h = _calc_h(
-        d, prepared.mu_I, prepared.C_I, prepared.A_I, prepared.mu_eta, prepared.C_eta
+        d,
+        prepared.mu_I,
+        prepared.C_I,
+        prepared.A_I,
+        prepared.mu_eta,
+        prepared.C_eta,
+        prepared.L_C_I,
+        prepared.L_C_eta,
     )
-    return _solve_symmetric_system(prepared.Lambda, h)
+    return _solve_symmetric_system(prepared.L_Lambda, prepared.Lambda, h)
 
 
 def calc_log_evidence(
@@ -398,7 +418,33 @@ class _PreparedProblem:
     mu_I: np.ndarray
     mu_eta: np.ndarray
     C_eta: np.ndarray
-    Lambda: np.ndarray | None = None
+    Lambda: np.ndarray | None = field(default=None, init=False)
+    L_C_I: np.ndarray | None = field(default=None, init=False)
+    L_C_eta: np.ndarray | None = field(default=None, init=False)
+    L_Lambda: np.ndarray | None = field(default=None, init=False)
+
+    def __post_init__(self) -> None:
+        # checking that the covariance matrices weren't built from empty component lists
+        _C_I_valid = self.C_I.size > 0
+        _C_eta_valid = self.C_eta.size > 0 and not np.allclose(self.C_eta, 0)
+
+        if _C_I_valid:
+            with contextlib.suppress(np.linalg.LinAlgError):
+                object.__setattr__(self, "L_C_I", np.linalg.cholesky(self.C_I))
+        if _C_eta_valid:
+            with contextlib.suppress(np.linalg.LinAlgError):
+                object.__setattr__(self, "L_C_eta", np.linalg.cholesky(self.C_eta))
+
+        if _C_I_valid and _C_eta_valid:
+            object.__setattr__(
+                self,
+                "Lambda",
+                _calc_Lambda(self.C_I, self.A_I, self.C_eta, self.L_C_I, self.L_C_eta),
+            )
+
+        if self.Lambda is not None:
+            with contextlib.suppress(np.linalg.LinAlgError):
+                object.__setattr__(self, "L_Lambda", np.linalg.cholesky(self.Lambda))
 
 
 _CACHE: dict[tuple, _PreparedProblem] = {}
@@ -481,11 +527,6 @@ def _prepare_problem(
     mu_eta = _calc_mu_eta(nuisance, M)
     C_eta = _calc_C_eta(nuisance, M)
     prepared = _PreparedProblem(M, A_I, C_I, mu_I, mu_eta, C_eta)
-
-    if inferred and nuisance:
-        # if either of inferred or nuisance is empty then we don't need Lambda, and in fact our defaults make some of these matrices singular.
-        Lambda = _calc_Lambda(C_I, A_I, C_eta)
-        prepared = replace(prepared, Lambda=Lambda)
 
     if len(_CACHE) >= 128:
         _CACHE.pop(next(iter(_CACHE)))

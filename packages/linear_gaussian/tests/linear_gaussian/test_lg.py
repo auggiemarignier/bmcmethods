@@ -300,7 +300,7 @@ class TestSolveSymmetricSystem:
 
         monkeypatch.setattr(np.linalg, "inv", fail_inv)
 
-        result = _solve_symmetric_system(matrix, rhs)
+        result = _solve_symmetric_system(None, matrix, rhs)
 
         expected = np.linalg.solve(matrix, rhs)
         np.testing.assert_allclose(result, expected)
@@ -314,7 +314,7 @@ class TestSolveSymmetricSystem:
             ValueError,
             match="Matrix is singular or not numerically positive definite",
         ):
-            _solve_symmetric_system(matrix, rhs)
+            _solve_symmetric_system(None, matrix, rhs)
 
 
 class TestLogGaussianDensity:
