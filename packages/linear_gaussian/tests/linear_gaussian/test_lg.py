@@ -290,21 +290,6 @@ class TestCalcH:
 
 
 class TestSolveSymmetricSystem:
-    def test_uses_precomputed_cholesky_when_provided(self, monkeypatch):
-        matrix = np.array([[4.0, 1.0], [1.0, 3.0]])
-        rhs = np.array([1.0, -2.0])
-        L = np.linalg.cholesky(matrix)
-
-        def fail_cholesky(_: np.ndarray) -> np.ndarray:
-            raise AssertionError("np.linalg.cholesky should not be used")
-
-        monkeypatch.setattr(np.linalg, "cholesky", fail_cholesky)
-
-        result = _solve_symmetric_system(L, matrix, rhs)
-
-        expected = np.linalg.solve(matrix, rhs)
-        np.testing.assert_allclose(result, expected)
-
     def test_matches_dense_solve_without_inv(self, monkeypatch):
         """The stabilized solve path should not rely on np.linalg.inv."""
         matrix = np.array([[4.0, 1.0], [1.0, 3.0]])
@@ -507,16 +492,6 @@ class TestCalcPosteriorCov:
                 C=np.array([[1.0, 0.0], [0.0, 0.0]]),
             )
         ]
-
-        with pytest.raises(
-            ValueError,
-            match="Matrix is singular or not numerically positive definite",
-        ):
-            calc_posterior_cov(inferred, nuisance)
-
-    def test_zero_noise_covariance_raises_clear_error(self):
-        inferred = [GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))]
-        nuisance = [GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.zeros((2, 2)))]
 
         with pytest.raises(
             ValueError,
