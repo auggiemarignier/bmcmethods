@@ -12,6 +12,7 @@ from linear_gaussian import (
     calc_posterior_mean,
 )
 from linear_gaussian.lg import (
+    _ID_TOKEN_MAP,
     _block_diag,
     _build_A_I,
     _build_C_I,
@@ -21,6 +22,7 @@ from linear_gaussian.lg import (
     _calc_Lambda,
     _calc_mu_eta,
     _log_gaussian_density,
+    _prepare_problem,
     _solve_symmetric_system,
 )
 
@@ -300,7 +302,22 @@ class TestSolveSymmetricSystem:
 
         monkeypatch.setattr(np.linalg, "inv", fail_inv)
 
-        result = _solve_symmetric_system(matrix, rhs)
+        result = _solve_symmetric_system(None, matrix, rhs)
+
+        expected = np.linalg.solve(matrix, rhs)
+        np.testing.assert_allclose(result, expected)
+
+    def test_uses_precomputed_cholesky_without_refactorizing(self, monkeypatch):
+        matrix = np.array([[4.0, 1.0], [1.0, 3.0]])
+        rhs = np.array([1.0, -2.0])
+        L = np.linalg.cholesky(matrix)
+
+        def fail_cholesky(_: np.ndarray) -> np.ndarray:
+            raise AssertionError("np.linalg.cholesky should not be used")
+
+        monkeypatch.setattr(np.linalg, "cholesky", fail_cholesky)
+
+        result = _solve_symmetric_system(L, matrix, rhs)
 
         expected = np.linalg.solve(matrix, rhs)
         np.testing.assert_allclose(result, expected)
@@ -314,7 +331,7 @@ class TestSolveSymmetricSystem:
             ValueError,
             match="Matrix is singular or not numerically positive definite",
         ):
-            _solve_symmetric_system(matrix, rhs)
+            _solve_symmetric_system(None, matrix, rhs)
 
 
 class TestLogGaussianDensity:
@@ -683,3 +700,68 @@ class TestEmptyNuisance:
         log_Z_with_nuisance = calc_log_evidence(d, inferred, nuisance)
         log_Z_no_nuisance = calc_log_evidence(d, inferred, [])
         assert not np.isclose(log_Z_with_nuisance, log_Z_no_nuisance)
+
+
+class TestPreparedProblem:
+    def make_scalar_component(self, a=1.0, mu=0.0, c=1.0):
+        A = np.array([[a]], dtype=float)
+        mu = np.array([mu], dtype=float)
+        C = np.array([[c]], dtype=float)
+        return GaussianComponent(A, mu, C)
+
+    def test_prepare_problem_both_sets(self):
+        comp_inf = self.make_scalar_component(a=2.0, mu=0.0, c=2.0)
+        comp_nui = self.make_scalar_component(a=3.0, mu=0.5, c=3.0)
+
+        prepared = _prepare_problem([comp_inf], [comp_nui])
+
+        assert prepared.M == 1
+        assert prepared.A_I.shape == (1, 1)
+        assert prepared.C_I.shape == (1, 1)
+        assert prepared.mu_I.shape == (1,)
+        assert prepared.mu_eta.shape == (1,)
+        assert prepared.C_eta.shape == (1, 1)
+
+        # Both covariance choleskies and Lambda should be computed
+        assert prepared.L_C_I is not None
+        assert prepared.L_C_eta is not None
+        assert prepared.Lambda is not None
+        assert prepared.L_Lambda is not None
+
+        # Tokens should be present for the live components
+        assert len(_ID_TOKEN_MAP) >= 2
+
+    def test_prepare_problem_only_inferred(self):
+        comp_inf = self.make_scalar_component(a=2.0, mu=0.0, c=2.0)
+        prepared = _prepare_problem([comp_inf], [])
+
+        assert prepared.M == 1
+        assert prepared.L_C_I is not None
+        # No nuisance => no C_eta cholesky and no Lambda
+        assert prepared.L_C_eta is None
+        assert prepared.Lambda is None
+        assert prepared.L_Lambda is None
+
+    def test_prepare_problem_only_nuisance(self):
+        comp_nui = self.make_scalar_component(a=3.0, mu=0.5, c=3.0)
+        prepared = _prepare_problem([], [comp_nui])
+
+        assert prepared.M == 1
+        # No inferred => no C_I cholesky and no Lambda
+        assert prepared.L_C_I is None
+        assert prepared.L_C_eta is not None
+        assert prepared.Lambda is None
+        assert prepared.L_Lambda is None
+
+    def test_prepare_problem_cache_reuse_and_instance_isolation(self):
+        comp_inf = self.make_scalar_component(a=2.0, mu=0.0, c=2.0)
+        comp_nui = self.make_scalar_component(a=3.0, mu=0.5, c=3.0)
+
+        p1 = _prepare_problem([comp_inf], [comp_nui])
+        p2 = _prepare_problem([comp_inf], [comp_nui])
+        assert p1 is p2
+
+        # Different live instance, same numeric contents, must not reuse the same cache entry
+        comp_inf2 = self.make_scalar_component(a=2.0, mu=0.0, c=2.0)
+        p3 = _prepare_problem([comp_inf2], [comp_nui])
+        assert p3 is not p1
