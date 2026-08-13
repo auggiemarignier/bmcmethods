@@ -11,7 +11,7 @@ the aggregate nuisance contribution.  Both X_I and eta are Gaussian.
 
 import contextlib
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, InitVar
 from weakref import ref
 
 import numpy as np
@@ -422,20 +422,18 @@ class _PreparedProblem:
     L_C_I: np.ndarray | None = field(default=None, init=False)
     L_C_eta: np.ndarray | None = field(default=None, init=False)
     L_Lambda: np.ndarray | None = field(default=None, init=False)
+    _no_nuisance: InitVar[bool] = False
+    _no_inferred: InitVar[bool] = False
 
-    def __post_init__(self) -> None:
-        # checking that the covariance matrices weren't built from empty component lists
-        _C_I_valid = self.C_I.size > 0
-        _C_eta_valid = self.C_eta.size > 0 and not np.allclose(self.C_eta, 0)
-
-        if _C_I_valid:
+    def __post_init__(self, _no_nuisance: bool, _no_inferred: bool) -> None:
+        if not _no_inferred:
             with contextlib.suppress(np.linalg.LinAlgError):
                 object.__setattr__(self, "L_C_I", np.linalg.cholesky(self.C_I))
-        if _C_eta_valid:
+        if not _no_nuisance:
             with contextlib.suppress(np.linalg.LinAlgError):
                 object.__setattr__(self, "L_C_eta", np.linalg.cholesky(self.C_eta))
 
-        if _C_I_valid and _C_eta_valid:
+        if not _no_inferred and not _no_nuisance:
             object.__setattr__(
                 self,
                 "Lambda",
@@ -526,7 +524,16 @@ def _prepare_problem(
     mu_I = _build_mu_I(inferred)
     mu_eta = _calc_mu_eta(nuisance, M)
     C_eta = _calc_C_eta(nuisance, M)
-    prepared = _PreparedProblem(M, A_I, C_I, mu_I, mu_eta, C_eta)
+    prepared = _PreparedProblem(
+        M,
+        A_I,
+        C_I,
+        mu_I,
+        mu_eta,
+        C_eta,
+        _no_nuisance=len(nuisance) == 0,
+        _no_inferred=len(inferred) == 0,
+    )
 
     if len(_CACHE) >= 128:
         _CACHE.pop(next(iter(_CACHE)))
