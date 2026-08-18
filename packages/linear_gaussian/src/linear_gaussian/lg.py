@@ -469,8 +469,8 @@ def calc_posterior_predictive_cov(
         If ``inferred`` is empty (no variables to infer) or ``nuisance`` is
         empty (degenerate noise-free model).
     """
-    prepared = _prepare_problem(inferred, nuisance)
     C_post = calc_posterior_cov(inferred, nuisance)
+    prepared = _prepare_problem(inferred, nuisance)
     return prepared.A_I @ C_post @ prepared.A_I.T + prepared.C_eta
 
 
