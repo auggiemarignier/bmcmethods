@@ -639,6 +639,21 @@ class TestCalcPosteriorPredictive:
         # Effective d = d - mu_eta = 1.0 => mu_post = 0.5 => mu_pred = 0.5 + mu_eta = 2.5
         np.testing.assert_allclose(mu_pred, np.array([2.5]), atol=1e-12)
 
+    def test_empty_inferred_raises(self):
+        d = np.zeros(1)
+        n = GaussianComponent(A=np.eye(1), mu=np.zeros(1), C=np.eye(1))
+        with pytest.raises(ValueError, match="inferred"):
+            calc_posterior_predictive_mean(d, [], [n])
+        with pytest.raises(ValueError, match="inferred"):
+            calc_posterior_predictive_cov([], [n])
+
+    def test_empty_nuisance_raises(self):
+        d = np.zeros(1)
+        i = GaussianComponent(A=np.eye(1), mu=np.zeros(1), C=np.eye(1))
+        with pytest.raises(ValueError, match="nuisance"):
+            calc_posterior_predictive_mean(d, [i], [])
+        with pytest.raises(ValueError, match="nuisance"):
+            calc_posterior_predictive_cov([i], [])
 
 # ---------------------------------------------------------------------------
 # calc_log_evidence
