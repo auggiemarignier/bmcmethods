@@ -436,8 +436,8 @@ def calc_posterior_predictive_mean(
         If ``inferred`` is empty (no variables to infer) or ``nuisance`` is
         empty (degenerate noise-free model).
     """
-    prepared = _prepare_problem(inferred, nuisance)
     mu_post = calc_posterior_mean(d, inferred, nuisance)
+    prepared = _prepare_problem(inferred, nuisance)
     return prepared.A_I @ mu_post + prepared.mu_eta
 
 
