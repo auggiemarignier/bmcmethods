@@ -10,6 +10,8 @@ from linear_gaussian import (
     calc_log_evidence,
     calc_posterior_cov,
     calc_posterior_mean,
+    calc_posterior_predictive_cov,
+    calc_posterior_predictive_mean,
 )
 from linear_gaussian.lg import (
     _ID_TOKEN_MAP,
@@ -594,6 +596,48 @@ class TestCalcPosteriorMean:
         expected = np.array([1e-6 / (1.0 + 1e12), 1.0 / (1e12 + 1.0)])
         assert np.all(np.isfinite(mu_post))
         np.testing.assert_allclose(mu_post, expected, rtol=1e-10, atol=1e-18)
+
+
+# ---------------------------------------------------------------------------
+# calc_posterior_predictive
+# ---------------------------------------------------------------------------
+
+
+class TestCalcPosteriorPredictive:
+    def test_1d_known_result(self):
+        d = np.array([1.5])
+        inferred = [
+            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[4.0]]))
+        ]
+        nuisance = [
+            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))
+        ]
+        mu_pred = calc_posterior_predictive_mean(d, inferred, nuisance)
+        C_pred = calc_posterior_predictive_cov(inferred, nuisance)
+        np.testing.assert_allclose(mu_pred, np.array([1.2]), atol=1e-12)
+        np.testing.assert_allclose(C_pred, np.array([[1.8]]), atol=1e-12)
+
+    def test_identity_case(self):
+        inferred = [GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))]
+        nuisance = [GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))]
+        d = np.zeros(2)
+        mu_pred = calc_posterior_predictive_mean(d, inferred, nuisance)
+        C_pred = calc_posterior_predictive_cov(inferred, nuisance)
+        np.testing.assert_allclose(mu_pred, np.zeros(2), atol=1e-12)
+        np.testing.assert_allclose(C_pred, 1.5 * np.eye(2), atol=1e-12)
+
+    def test_nuisance_mean_shifts_predictive_mean(self):
+        d = np.array([3.0])
+        mu_eta = np.array([2.0])
+        inferred = [
+            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))
+        ]
+        nuisance = [
+            GaussianComponent(A=np.array([[1.0]]), mu=mu_eta, C=np.array([[1.0]]))
+        ]
+        mu_pred = calc_posterior_predictive_mean(d, inferred, nuisance)
+        # Effective d = d - mu_eta = 1.0 => mu_post = 0.5 => mu_pred = 0.5 + mu_eta = 2.5
+        np.testing.assert_allclose(mu_pred, np.array([2.5]), atol=1e-12)
 
 
 # ---------------------------------------------------------------------------

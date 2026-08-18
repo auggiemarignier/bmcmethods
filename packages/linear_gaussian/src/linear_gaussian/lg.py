@@ -11,7 +11,7 @@ the aggregate nuisance contribution.  Both X_I and eta are Gaussian.
 
 import contextlib
 import uuid
-from dataclasses import dataclass, field, InitVar
+from dataclasses import InitVar, dataclass, field
 from weakref import ref
 
 import numpy as np
@@ -403,6 +403,68 @@ def calc_log_evidence(
         C_marginal = A_I @ C_I @ A_I.T + C_eta
 
     return _log_gaussian_density(d, mu_marginal, C_marginal)
+
+
+def calc_posterior_predictive_mean(
+    d: NDArrayFloat,
+    inferred: list[GaussianComponent],
+    nuisance: list[GaussianComponent],
+) -> NDArrayFloat:
+    """Compute the mean of the posterior predictive distribution.
+
+    Computes the mean of the posterior predictive distribution d^* | d where d^* is a new replicate of the original data.
+
+        mu_pred = A_I mu_post + mu_eta
+
+    Parameters
+    ----------
+    d : ndarray, shape (M,)
+        Observed data vector.
+    inferred : list of GaussianComponent
+        The components whose latent variables are to be inferred.
+    nuisance : list of GaussianComponent
+        The components that are marginalised out (provide the noise model).
+
+    Returns
+    -------
+    mu_pred : ndarray, shape (M,)
+        Posterior predictive mean
+
+    Raises
+    ------
+    ValueError
+        If ``inferred`` is empty (no variables to infer) or ``nuisance`` is
+        empty (degenerate noise-free model).
+    """
+    prepared = _prepare_problem(inferred, nuisance)
+    mu_post = calc_posterior_mean(d, inferred, nuisance)
+    return prepared.A_I @ mu_post + prepared.mu_eta
+
+
+def calc_posterior_predictive_cov(
+    inferred: list[GaussianComponent], nuisance: list[GaussianComponent]
+) -> NDArrayFloat:
+    """Compute the covariance of the posterior predictive distribution.
+
+    Computes the mean of the posterior predictive distribution d^* | d where d^* is a new replicate of the original data.
+
+        C_pred  = A_I C_post A_I^T + C_eta
+
+    Parameters
+    ----------
+    inferred : list of GaussianComponent
+        The components whose latent variables are to be inferred.
+    nuisance : list of GaussianComponent
+        The components that are marginalised out (provide the noise model).
+
+    Returns
+    -------
+    C_pred : ndarray, shape (M, M)
+        Posterior covariance, where M is the original data length.
+    """
+    prepared = _prepare_problem(inferred, nuisance)
+    C_post = calc_posterior_cov(inferred, nuisance)
+    return prepared.A_I @ C_post @ prepared.A_I.T + prepared.C_eta
 
 
 # ---------------------------------------------------------------------------

@@ -5,6 +5,8 @@ from .lg import (
     calc_log_evidence,
     calc_posterior_cov,
     calc_posterior_mean,
+    calc_posterior_predictive_cov,
+    calc_posterior_predictive_mean,
 )
 
 __all__ = [
@@ -12,4 +14,6 @@ __all__ = [
     "calc_log_evidence",
     "calc_posterior_cov",
     "calc_posterior_mean",
+    "calc_posterior_predictive_mean",
+    "calc_posterior_predictive_cov",
 ]
