@@ -446,9 +446,9 @@ def calc_posterior_predictive_cov(
 ) -> NDArrayFloat:
     """Compute the covariance of the posterior predictive distribution.
 
-    Computes the mean of the posterior predictive distribution d^* | d where d^* is a new replicate of the original data.
+    Computes the covariance of the posterior predictive distribution d^* | d where d^* is a new replicate of the original data.
 
-        C_pred  = A_I C_post A_I^T + C_eta
+        C_pred = A_I C_post A_I^T + C_eta
 
     Parameters
     ----------
@@ -460,7 +460,14 @@ def calc_posterior_predictive_cov(
     Returns
     -------
     C_pred : ndarray, shape (M, M)
-        Posterior covariance, where M is the original data length.
+        Posterior predictive covariance of a new replicate d^*, where M is the
+        original data length.
+
+    Raises
+    ------
+    ValueError
+        If ``inferred`` is empty (no variables to infer) or ``nuisance`` is
+        empty (degenerate noise-free model).
     """
     prepared = _prepare_problem(inferred, nuisance)
     C_post = calc_posterior_cov(inferred, nuisance)
