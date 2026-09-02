@@ -608,3 +608,9 @@ def _prepare_problem(
         _CACHE.pop(next(iter(_CACHE)))
     _CACHE[key] = prepared
     return prepared
+
+
+def clear_cache() -> None:
+    """Clear the prepared-problem cache and associated ID->token map."""
+    _CACHE.clear()
+    _ID_TOKEN_MAP.clear()
