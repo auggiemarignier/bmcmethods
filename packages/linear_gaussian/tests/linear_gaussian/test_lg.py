@@ -14,6 +14,7 @@ from linear_gaussian import (
     calc_posterior_predictive_mean,
 )
 from linear_gaussian.lg import (
+    _CACHE,
     _ID_TOKEN_MAP,
     _block_diag,
     _build_A_I,
@@ -26,6 +27,7 @@ from linear_gaussian.lg import (
     _log_gaussian_density,
     _prepare_problem,
     _solve_symmetric_system,
+    clear_cache,
 )
 
 # ---------------------------------------------------------------------------
@@ -655,6 +657,7 @@ class TestCalcPosteriorPredictive:
         with pytest.raises(ValueError, match="nuisance"):
             calc_posterior_predictive_cov([i], [])
 
+
 # ---------------------------------------------------------------------------
 # calc_log_evidence
 # ---------------------------------------------------------------------------
@@ -824,3 +827,17 @@ class TestPreparedProblem:
         comp_inf2 = self.make_scalar_component(a=2.0, mu=0.0, c=2.0)
         p3 = _prepare_problem([comp_inf2], [comp_nui])
         assert p3 is not p1
+
+    def test_clear_cache_clears_internal_structures(self):
+        comp_inf = self.make_scalar_component(a=2.0, mu=0.0, c=2.0)
+        comp_nui = self.make_scalar_component(a=3.0, mu=0.5, c=3.0)
+
+        # populate caches
+        _prepare_problem([comp_inf], [comp_nui])
+        assert len(_CACHE) > 0
+        assert len(_ID_TOKEN_MAP) > 0
+
+        # clear and ensure internal structures are emptied
+        clear_cache()
+        assert len(_CACHE) == 0
+        assert len(_ID_TOKEN_MAP) == 0
