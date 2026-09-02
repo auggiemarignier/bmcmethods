@@ -611,6 +611,10 @@ def _prepare_problem(
 
 
 def clear_cache() -> None:
-    """Clear the prepared-problem cache and associated ID->token map."""
+    """Clear the prepared-problem cache and associated ID->token map.
+
+    Not thread-safe: if you call this concurrently with other cache access from multiple
+    threads, wrap cache operations in a lock.
+    """
     _CACHE.clear()
     _ID_TOKEN_MAP.clear()
