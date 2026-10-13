@@ -39,6 +39,12 @@ class TestInputValidation:
         with pytest.raises(ValueError, match="d"):
             calc_log_evidence(d, [gc], [])
 
+    def test_non_vector_d_raises(self):
+        d = np.zeros((2, 1))
+        gc = self._make_gc()
+        with pytest.raises(ValueError, match="1D array"):
+            calc_log_evidence(d, [gc], [])
+
     def test_posterior_empty_inferred_raises(self):
         d = np.zeros(2)
         n = self._make_gc()
@@ -278,3 +284,47 @@ class TestStrategyDispatch:
             np.testing.assert_allclose(
                 data_result, precision_result, rtol=1e-10, atol=1e-10
             )
+
+
+class TestPublicCalculations:
+    @staticmethod
+    def _components():
+        inferred = [
+            GaussianComponent(
+                A=np.array([[1.0]]), mu=np.array([0.5]), C=np.array([[4.0]])
+            )
+        ]
+        nuisance = [
+            GaussianComponent(
+                A=np.array([[1.0]]), mu=np.array([0.25]), C=np.array([[1.0]])
+            )
+        ]
+        return inferred, nuisance
+
+    def test_log_evidence_public_api(self):
+        inferred, nuisance = self._components()
+        d = np.array([1.5])
+
+        result = calc_log_evidence(d, inferred, nuisance)
+
+        expected = -0.5 * np.log(2.0 * np.pi * 5.0) - 0.5 * (1.5 - 0.75) ** 2 / 5.0
+        np.testing.assert_allclose(result, expected)
+
+    def test_posterior_predictive_mean_dispatches_to_data_strategy(self):
+        inferred, nuisance = self._components()
+        d = np.array([1.5])
+
+        result = calc_posterior_predictive_mean(
+            d, inferred, nuisance, formulation="data"
+        )
+
+        # Posterior latent mean is 0.5 + 4/5 * (1.5 - 0.5 - 0.25) = 1.1.
+        np.testing.assert_allclose(result, np.array([1.1 + 0.25]))
+
+    def test_posterior_predictive_cov_dispatches_to_data_strategy(self):
+        inferred, nuisance = self._components()
+
+        result = calc_posterior_predictive_cov(inferred, nuisance, formulation="data")
+
+        # Latent posterior variance is 4 - 4^2 / (4 + 1) = 0.8.
+        np.testing.assert_allclose(result, np.array([[0.8 + 1.0]]))
