@@ -59,15 +59,23 @@ def calc_C_eta(nuisance: list[GaussianComponent], M: int) -> NDArrayFloat:
 def prepare(
     inferred: list[GaussianComponent], nuisance: list[GaussianComponent]
 ) -> tuple[NDArrayFloat, NDArrayFloat, NDArrayFloat, NDArrayFloat, NDArrayFloat]:
-    """Assemble shared arrays for an inference strategy."""
+    """Assemble shared arrays, reusing a cached result when available."""
+    from .cache import get_prepared, store_prepared
+
+    prepared = get_prepared(inferred, nuisance)
+    if prepared is not None:
+        return prepared
+
     M = (inferred + nuisance)[0].A.shape[0]
-    return (
+    prepared = (
         build_A_I(inferred, M),
         build_mu_I(inferred),
         build_C_I(inferred),
         calc_mu_eta(nuisance, M),
         calc_C_eta(nuisance, M),
     )
+    store_prepared(inferred, nuisance, prepared)
+    return prepared
 
 
 def solve_symmetric(

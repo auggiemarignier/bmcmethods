@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from .cache import get_precision, store_precision
 from .common import posterior_predictive_cov as ppc
 from .common import posterior_predictive_mean as ppm
 from .common import prepare, solve_symmetric
@@ -48,15 +49,34 @@ def _calc_h(
     return C_I_inv_mu_I + A_I.T @ C_eta_inv_residual
 
 
-def posterior_cov(
+def _precision_and_factor(
     inferred: list[GaussianComponent], nuisance: list[GaussianComponent]
-) -> NDArrayFloat:
-    """Posterior covariance computed with the latent precision matrix."""
+) -> tuple[
+    NDArrayFloat | None,
+    NDArrayFloat | None,
+    NDArrayFloat,
+    NDArrayFloat,
+]:
+    """Return cached prior, nuisance, and posterior precision factors."""
+    cached = get_precision(inferred, nuisance)
+    if cached is not None:
+        return cached
+
     A_I, _, C_I, _, C_eta = prepare(inferred, nuisance)
     L_C_I = _cholesky_or_none(C_I)
     L_C_eta = _cholesky_or_none(C_eta)
     Lambda = _calc_Lambda(C_I, A_I, C_eta, L_C_I, L_C_eta)
     L_Lambda = np.linalg.cholesky(Lambda)
+    result = (L_C_I, L_C_eta, Lambda, L_Lambda)
+    store_precision(inferred, nuisance, result)
+    return result
+
+
+def posterior_cov(
+    inferred: list[GaussianComponent], nuisance: list[GaussianComponent]
+) -> NDArrayFloat:
+    """Posterior covariance computed with the latent precision matrix."""
+    _, _, Lambda, L_Lambda = _precision_and_factor(inferred, nuisance)
     return solve_symmetric(Lambda, np.eye(Lambda.shape[0]), L_Lambda)
 
 
@@ -67,10 +87,7 @@ def posterior_mean(
 ) -> NDArrayFloat:
     """Posterior mean computed with the latent precision matrix."""
     A_I, mu_I, C_I, mu_eta, C_eta = prepare(inferred, nuisance)
-    L_C_I = _cholesky_or_none(C_I)
-    L_C_eta = _cholesky_or_none(C_eta)
-    Lambda = _calc_Lambda(C_I, A_I, C_eta, L_C_I, L_C_eta)
-    L_Lambda = np.linalg.cholesky(Lambda)
+    L_C_I, L_C_eta, Lambda, L_Lambda = _precision_and_factor(inferred, nuisance)
     h = _calc_h(d, mu_I, C_I, A_I, mu_eta, C_eta, L_C_I, L_C_eta)
     return solve_symmetric(Lambda, h, L_Lambda)
 
