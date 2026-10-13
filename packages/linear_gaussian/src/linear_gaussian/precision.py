@@ -2,79 +2,17 @@
 
 import numpy as np
 
+from .common import posterior_predictive_cov as ppc
+from .common import posterior_predictive_mean as ppm
+from .common import prepare, solve_symmetric
 from .models import GaussianComponent, NDArrayFloat
 
 
-def _block_diag(matrices: list[NDArrayFloat]) -> NDArrayFloat:
-    """Build a block-diagonal matrix from a list of square matrices."""
-    sizes = [m.shape[0] for m in matrices]
-    n = sum(sizes)
-    result = np.zeros((n, n))
-    offset = 0
-    for m in matrices:
-        s = m.shape[0]
-        result[offset : offset + s, offset : offset + s] = m
-        offset += s
-    return result
-
-
-def _calc_mu_eta(nuisance: list[GaussianComponent], M: int) -> NDArrayFloat:
-    """Compute the nuisance mean mu_eta = sum_m A_m mu_m."""
-    if not nuisance:
-        return np.zeros(M)
-    return np.sum([c.A @ c.mu for c in nuisance], axis=0)
-
-
-def _calc_C_eta(nuisance: list[GaussianComponent], M: int) -> NDArrayFloat:
-    """Compute the nuisance covariance C_eta = sum_m A_m C_m A_m^T."""
-    if not nuisance:
-        return np.zeros((M, M))
-    return np.sum([c.A @ c.C @ c.A.T for c in nuisance], axis=0)
-
-
-def _build_A_I(inferred: list[GaussianComponent], M: int) -> NDArrayFloat:
-    """Build A_I = (A_1 | ... | A_k) by horizontal concatenation."""
-    if not inferred:
-        return np.zeros((M, 0))
-    return np.hstack([c.A for c in inferred])
-
-
-def _build_mu_I(inferred: list[GaussianComponent]) -> NDArrayFloat:
-    """Build mu_I = (mu_1; ...; mu_k) by vertical stacking."""
-    if not inferred:
-        return np.zeros(0)
-    return np.concatenate([c.mu for c in inferred])
-
-
-def _build_C_I(inferred: list[GaussianComponent]) -> NDArrayFloat:
-    """Build C_I = diag(C_1, ..., C_k) as a block-diagonal matrix."""
-    if not inferred:
-        return np.zeros((0, 0))
-    return _block_diag([c.C for c in inferred])
-
-
-def _solve_cholesky(L: NDArrayFloat, rhs: NDArrayFloat) -> NDArrayFloat:
-    y = np.linalg.solve(L, rhs)
-    return np.linalg.solve(L.T, y)
-
-
-def _solve_symmetric_system(
-    L: NDArrayFloat | None, matrix: NDArrayFloat, rhs: NDArrayFloat
-) -> NDArrayFloat:
-    if L is not None:
-        return _solve_cholesky(L, rhs)
-
+def _cholesky_or_none(matrix: NDArrayFloat) -> NDArrayFloat | None:
     try:
-        L_chol = np.linalg.cholesky(matrix)
+        return np.linalg.cholesky(matrix)
     except np.linalg.LinAlgError:
-        try:
-            return np.linalg.solve(matrix, rhs)
-        except np.linalg.LinAlgError as exc:
-            raise ValueError(
-                "Matrix is singular or not numerically positive definite."
-            ) from exc
-    else:
-        return _solve_cholesky(L_chol, rhs)
+        return None
 
 
 def _calc_Lambda(
@@ -86,8 +24,8 @@ def _calc_Lambda(
 ) -> NDArrayFloat:
     """Compute the posterior precision Lambda = C_I^{-1} + A_I^T C_eta^{-1} A_I."""
     identity = np.eye(C_I.shape[0], dtype=C_I.dtype)
-    C_I_inv = _solve_symmetric_system(L_C_I, C_I, identity)
-    C_eta_inv_A_I = _solve_symmetric_system(L_C_eta, C_eta, A_I)
+    C_I_inv = solve_symmetric(C_I, identity, L_C_I)
+    C_eta_inv_A_I = solve_symmetric(C_eta, A_I, L_C_eta)
     return C_I_inv + A_I.T @ C_eta_inv_A_I
 
 
@@ -105,40 +43,49 @@ def _calc_h(
 
     If Cholesky factors are provided they will be used for the solves.
     """
-    C_I_inv_mu_I = _solve_symmetric_system(L_C_I, C_I, mu_I)
-    C_eta_inv_residual = _solve_symmetric_system(L_C_eta, C_eta, d - mu_eta)
+    C_I_inv_mu_I = solve_symmetric(C_I, mu_I, L_C_I)
+    C_eta_inv_residual = solve_symmetric(C_eta, d - mu_eta, L_C_eta)
     return C_I_inv_mu_I + A_I.T @ C_eta_inv_residual
 
 
-def _log_gaussian_density(
-    x: NDArrayFloat,
-    mean: NDArrayFloat,
-    cov: NDArrayFloat,
-) -> float:
-    """Evaluate the log of N(x; mean, cov)."""
-    M = x.shape[0]
-    diff = x - mean
+def posterior_cov(
+    inferred: list[GaussianComponent], nuisance: list[GaussianComponent]
+) -> NDArrayFloat:
+    """Posterior covariance computed with the latent precision matrix."""
+    A_I, _, C_I, _, C_eta = prepare(inferred, nuisance)
+    L_C_I = _cholesky_or_none(C_I)
+    L_C_eta = _cholesky_or_none(C_eta)
+    Lambda = _calc_Lambda(C_I, A_I, C_eta, L_C_I, L_C_eta)
+    L_Lambda = np.linalg.cholesky(Lambda)
+    return solve_symmetric(Lambda, np.eye(Lambda.shape[0]), L_Lambda)
 
-    try:
-        L = np.linalg.cholesky(cov)
-    except np.linalg.LinAlgError:
-        jitter_scale = float(np.trace(cov) / M)
-        if not np.isfinite(jitter_scale) or jitter_scale <= 0:
-            jitter_scale = 1.0
-        jitter = max(1e-12 * jitter_scale, 1e-12)
 
-        try:
-            L = np.linalg.cholesky(cov + jitter * np.eye(M))
-        except np.linalg.LinAlgError:
-            sign, log_det = np.linalg.slogdet(cov)
-            if sign <= 0 or not np.isfinite(log_det):
-                raise ValueError(
-                    "Covariance matrix is not positive definite."
-                ) from None
-            quad = float(diff @ np.linalg.solve(cov, diff))
-            return float(-0.5 * M * np.log(2 * np.pi) - 0.5 * log_det - 0.5 * quad)
+def posterior_mean(
+    d: NDArrayFloat,
+    inferred: list[GaussianComponent],
+    nuisance: list[GaussianComponent],
+) -> NDArrayFloat:
+    """Posterior mean computed with the latent precision matrix."""
+    A_I, mu_I, C_I, mu_eta, C_eta = prepare(inferred, nuisance)
+    L_C_I = _cholesky_or_none(C_I)
+    L_C_eta = _cholesky_or_none(C_eta)
+    Lambda = _calc_Lambda(C_I, A_I, C_eta, L_C_I, L_C_eta)
+    L_Lambda = np.linalg.cholesky(Lambda)
+    h = _calc_h(d, mu_I, C_I, A_I, mu_eta, C_eta, L_C_I, L_C_eta)
+    return solve_symmetric(Lambda, h, L_Lambda)
 
-    log_det = 2.0 * np.sum(np.log(np.diag(L)))
-    y = np.linalg.solve(L, diff)
-    quad = float(y @ y)
-    return float(-0.5 * M * np.log(2 * np.pi) - 0.5 * log_det - 0.5 * quad)
+
+def posterior_predictive_mean(
+    d: NDArrayFloat,
+    inferred: list[GaussianComponent],
+    nuisance: list[GaussianComponent],
+) -> NDArrayFloat:
+    """Posterior predictive mean using the data-space posterior."""
+    return ppm(d, inferred, nuisance, posterior_mean)
+
+
+def posterior_predictive_cov(
+    inferred: list[GaussianComponent], nuisance: list[GaussianComponent]
+) -> NDArrayFloat:
+    """Posterior predictive covariance using the data-space posterior."""
+    return ppc(inferred, nuisance, posterior_cov)

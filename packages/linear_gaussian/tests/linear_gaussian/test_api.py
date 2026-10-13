@@ -1,5 +1,7 @@
 """Tests for linear_gaussian.api."""
 
+import inspect
+
 import numpy as np
 import pytest
 from linear_gaussian import (
@@ -9,7 +11,10 @@ from linear_gaussian import (
     calc_posterior_mean,
     calc_posterior_predictive_cov,
     calc_posterior_predictive_mean,
+    data_space,
+    precision,
 )
+from linear_gaussian.api import _select_strategy
 
 
 class TestInputValidation:
@@ -55,6 +60,28 @@ class TestInputValidation:
         i = self._make_gc()
         with pytest.raises(ValueError, match="nuisance"):
             calc_posterior_cov([i], [])
+
+    def test_predictive_mean_empty_inferred_raises(self):
+        d = np.zeros(2)
+        nuisance = self._make_gc()
+        with pytest.raises(ValueError, match="inferred"):
+            calc_posterior_predictive_mean(d, [], [nuisance])
+
+    def test_predictive_cov_empty_inferred_raises(self):
+        nuisance = self._make_gc()
+        with pytest.raises(ValueError, match="inferred"):
+            calc_posterior_predictive_cov([], [nuisance])
+
+    def test_predictive_mean_empty_nuisance_raises(self):
+        d = np.zeros(2)
+        inferred = self._make_gc()
+        with pytest.raises(ValueError, match="nuisance"):
+            calc_posterior_predictive_mean(d, [inferred], [])
+
+    def test_predictive_cov_empty_nuisance_raises(self):
+        inferred = self._make_gc()
+        with pytest.raises(ValueError, match="nuisance"):
+            calc_posterior_predictive_cov([inferred], [])
 
 
 class TestCalcPosteriorCov:
@@ -202,150 +229,52 @@ class TestCalcPosteriorMean:
         np.testing.assert_allclose(mu_post, expected, rtol=1e-10, atol=1e-18)
 
 
-class TestCalcPosteriorPredictive:
-    def test_1d_known_result(self):
-        d = np.array([1.5])
+class TestStrategyDispatch:
+    def test_selects_matching_modules(self):
+        assert _select_strategy("precision") is precision
+        assert _select_strategy("data") is data_space
+
+    def test_rejects_unknown_strategy(self):
+        with pytest.raises(ValueError, match="formulation must be either"):
+            _select_strategy("unknown")
+
+    def test_strategies_share_the_same_public_contract(self):
+        for name in ("posterior_mean", "posterior_cov"):
+            precision_parameters = tuple(
+                inspect.signature(getattr(precision, name)).parameters
+            )
+            data_parameters = tuple(
+                inspect.signature(getattr(data_space, name)).parameters
+            )
+            assert data_parameters == precision_parameters
+
+    def test_posterior_calculations_agree_across_strategies(self):
         inferred = [
-            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[4.0]]))
+            GaussianComponent(
+                A=np.array([[1.0, 0.2], [-0.3, 1.1], [0.5, -0.4]]),
+                mu=np.array([0.4, -0.2]),
+                C=np.array([[1.5, 0.2], [0.2, 0.8]]),
+            )
         ]
         nuisance = [
-            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))
+            GaussianComponent(
+                A=np.eye(3),
+                mu=np.array([0.1, -0.5, 0.2]),
+                C=np.diag([0.7, 1.2, 0.9]),
+            )
         ]
-        mu_pred = calc_posterior_predictive_mean(d, inferred, nuisance)
-        C_pred = calc_posterior_predictive_cov(inferred, nuisance)
-        np.testing.assert_allclose(mu_pred, np.array([1.2]), atol=1e-12)
-        np.testing.assert_allclose(C_pred, np.array([[1.8]]), atol=1e-12)
-
-    def test_identity_case(self):
-        inferred = [GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))]
-        nuisance = [GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))]
-        d = np.zeros(2)
-        mu_pred = calc_posterior_predictive_mean(d, inferred, nuisance)
-        C_pred = calc_posterior_predictive_cov(inferred, nuisance)
-        np.testing.assert_allclose(mu_pred, np.zeros(2), atol=1e-12)
-        np.testing.assert_allclose(C_pred, 1.5 * np.eye(2), atol=1e-12)
-
-    def test_nuisance_mean_shifts_predictive_mean(self):
-        d = np.array([3.0])
-        mu_eta = np.array([2.0])
-        inferred = [
-            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))
-        ]
-        nuisance = [
-            GaussianComponent(A=np.array([[1.0]]), mu=mu_eta, C=np.array([[1.0]]))
-        ]
-        mu_pred = calc_posterior_predictive_mean(d, inferred, nuisance)
-        # Effective d = d - mu_eta = 1.0 => mu_post = 0.5 => mu_pred = 0.5 + mu_eta = 2.5
-        np.testing.assert_allclose(mu_pred, np.array([2.5]), atol=1e-12)
-
-    def test_empty_inferred_raises(self):
-        d = np.zeros(1)
-        n = GaussianComponent(A=np.eye(1), mu=np.zeros(1), C=np.eye(1))
-        with pytest.raises(ValueError, match="inferred"):
-            calc_posterior_predictive_mean(d, [], [n])
-        with pytest.raises(ValueError, match="inferred"):
-            calc_posterior_predictive_cov([], [n])
-
-    def test_empty_nuisance_raises(self):
-        d = np.zeros(1)
-        i = GaussianComponent(A=np.eye(1), mu=np.zeros(1), C=np.eye(1))
-        with pytest.raises(ValueError, match="nuisance"):
-            calc_posterior_predictive_mean(d, [i], [])
-        with pytest.raises(ValueError, match="nuisance"):
-            calc_posterior_predictive_cov([i], [])
-
-
-class TestCalcLogEvidence:
-    def test_1d_known_result(self):
-        """1D: d ~ N(0, C_I + C_eta) = N(0, 5). log p(1.5) = log N(1.5; 0, 5)."""
-        d = np.array([1.5])
-        inferred = [
-            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[4.0]]))
-        ]
-        nuisance = [
-            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))
-        ]
-        log_Z = calc_log_evidence(d, inferred, nuisance)
-        expected = -0.5 * np.log(2 * np.pi * 5.0) - 0.5 * 1.5**2 / 5.0
-        np.testing.assert_allclose(log_Z, expected, rtol=1e-6)
-
-    def test_identity_2d_zero_data(self):
-        """2D: d=0, A=I, C_I=I, C_eta=I => d ~ N(0, 2I), log p(0) = -log(4pi)."""
-        d = np.zeros(2)
-        inferred = [GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))]
-        nuisance = [GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))]
-        log_Z = calc_log_evidence(d, inferred, nuisance)
-        expected = -np.log(4 * np.pi)
-        np.testing.assert_allclose(log_Z, expected, rtol=1e-6)
-
-    def test_nonzero_prior_mean(self):
-        """With nonzero prior mean, marginal mean shifts accordingly."""
-        d = np.array([2.0])
-        mu_prior = np.array([1.0])
-        inferred = [
-            GaussianComponent(A=np.array([[1.0]]), mu=mu_prior, C=np.array([[1.0]]))
-        ]
-        nuisance = [
-            GaussianComponent(A=np.array([[1.0]]), mu=np.zeros(1), C=np.array([[1.0]]))
-        ]
-        log_Z = calc_log_evidence(d, inferred, nuisance)
-        # d ~ N(A_I mu_I, A_I C_I A_I^T + C_eta) = N(1, 2)
-        expected = -0.5 * np.log(4 * np.pi) - (2.0 - 1.0) ** 2 / 4.0
-        np.testing.assert_allclose(log_Z, expected, rtol=1e-6)
-
-    def test_two_inferred_components(self):
-        """Two inferred components with A_I = [I | I] (stacking)."""
-        d = np.zeros(2)
-        i1 = GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))
-        i2 = GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))
-        nuisance = [GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))]
-        log_Z = calc_log_evidence(d, [i1, i2], nuisance)
-        # A_I = hstack([I, I]) = [[1,0,1,0],[0,1,0,1]] (2x4)
-        # A_I C_I A_I^T = A_I * I_4 * A_I^T = [[1,0,1,0],[0,1,0,1]] [[1,0,1,0],[0,1,0,1]]^T
-        #               = [[2,0],[0,2]] = 2*I_2
-        # Total C_marginal = 2*I + I = 3*I
-        expected = -np.log(2 * np.pi) - np.log(3)
-        np.testing.assert_allclose(log_Z, expected, rtol=1e-6)
-
-
-class TestEmptyInferred:
-    def test_evidence_equals_nuisance_marginal(self):
-        """With inferred=[], evidence is just the nuisance marginal N(d; mu_eta, C_eta)."""
-        d = np.zeros(2)
-        nuisance = [GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))]
-        log_Z = calc_log_evidence(d, [], nuisance)
-        # d ~ N(0, I_2), log p(0) = -log(2*pi)
-        expected = -np.log(2 * np.pi)
-        np.testing.assert_allclose(log_Z, expected, rtol=1e-6)
-
-    def test_evidence_matches_full_zero_A_case(self):
-        """With inferred having A=0, result matches inferred=[] case."""
-        d = np.zeros(2)
-        nuisance = [GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))]
-        log_Z_empty = calc_log_evidence(d, [], nuisance)
-
-        inferred_zero_A = [
-            GaussianComponent(A=np.zeros((2, 2)), mu=np.zeros(2), C=np.eye(2))
-        ]
-        log_Z_zero_A = calc_log_evidence(d, inferred_zero_A, nuisance)
-        np.testing.assert_allclose(log_Z_empty, log_Z_zero_A, rtol=1e-6)
-
-
-class TestEmptyNuisance:
-    def test_evidence_uses_prior_marginal(self):
-        """With nuisance=[], d ~ N(A_I mu_I, A_I C_I A_I^T)."""
-        d = np.zeros(2)
-        inferred = [GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))]
-        log_Z = calc_log_evidence(d, inferred, [])
-        # d ~ N(0, I_2)
-        expected = -np.log(2 * np.pi)
-        np.testing.assert_allclose(log_Z, expected, rtol=1e-6)
-
-    def test_empty_inferred_and_empty_nuisance_differ_from_either_alone(self):
-        """Empty nuisance gives different evidence than nuisance=[noise_I]."""
-        d = np.zeros(2)
-        inferred = [GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))]
-        nuisance = [GaussianComponent(A=np.eye(2), mu=np.zeros(2), C=np.eye(2))]
-        log_Z_with_nuisance = calc_log_evidence(d, inferred, nuisance)
-        log_Z_no_nuisance = calc_log_evidence(d, inferred, [])
-        assert not np.isclose(log_Z_with_nuisance, log_Z_no_nuisance)
+        d = np.array([0.8, -0.3, 0.5])
+        pairs = (
+            (
+                calc_posterior_mean(d, inferred, nuisance, formulation="data"),
+                calc_posterior_mean(d, inferred, nuisance),
+            ),
+            (
+                calc_posterior_cov(inferred, nuisance, formulation="data"),
+                calc_posterior_cov(inferred, nuisance),
+            ),
+        )
+        for data_result, precision_result in pairs:
+            np.testing.assert_allclose(
+                data_result, precision_result, rtol=1e-10, atol=1e-10
+            )

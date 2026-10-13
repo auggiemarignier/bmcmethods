@@ -1,14 +1,17 @@
 """Public functions for linear-Gaussian inference."""
 
-import numpy as np
-
-from .cache import _prepare_problem
+from . import data_space, precision
+from .common import log_evidence
 from .models import GaussianComponent, NDArrayFloat
-from .precision import (
-    _calc_h,
-    _log_gaussian_density,
-    _solve_symmetric_system,
-)
+
+_STRATEGIES = {"precision": precision, "data": data_space}
+
+
+def _select_strategy(formulation: str):
+    try:
+        return _STRATEGIES[formulation]
+    except (KeyError, TypeError):
+        raise ValueError("formulation must be either 'precision' or 'data'.") from None
 
 
 def _validate_inputs(
@@ -37,6 +40,8 @@ def _validate_inputs(
 def calc_posterior_cov(
     inferred: list[GaussianComponent],
     nuisance: list[GaussianComponent],
+    *,
+    formulation: str = "precision",
 ) -> NDArrayFloat:
     """Compute the posterior covariance of the inferred variables.
 
@@ -58,6 +63,7 @@ def calc_posterior_cov(
         If ``inferred`` is empty (no variables to infer) or ``nuisance`` is
         empty (degenerate noise-free model).
     """
+    strategy = _select_strategy(formulation)
     if not inferred:
         raise ValueError(
             "inferred must be non-empty to compute a posterior covariance."
@@ -68,17 +74,15 @@ def calc_posterior_cov(
             "the noise-free case (nuisance=[]) leads to a degenerate posterior."
         )
 
-    prepared = _prepare_problem(inferred, nuisance)
-    if prepared.Lambda is None:
-        raise RuntimeError("_prepare_problem did not compute Lambda.")
-    identity = np.eye(prepared.Lambda.shape[0], dtype=prepared.Lambda.dtype)
-    return _solve_symmetric_system(prepared.L_Lambda, prepared.Lambda, identity)
+    return strategy.posterior_cov(inferred, nuisance)
 
 
 def calc_posterior_mean(
     d: NDArrayFloat,
     inferred: list[GaussianComponent],
     nuisance: list[GaussianComponent],
+    *,
+    formulation: str = "precision",
 ) -> NDArrayFloat:
     """Compute the posterior mean of the inferred variables.
 
@@ -102,6 +106,7 @@ def calc_posterior_mean(
         If ``inferred`` is empty (no variables to infer) or ``nuisance`` is
         empty (degenerate noise-free model).
     """
+    strategy = _select_strategy(formulation)
     if not inferred:
         raise ValueError("inferred must be non-empty to compute a posterior mean.")
     if not nuisance:
@@ -111,26 +116,15 @@ def calc_posterior_mean(
         )
     _validate_inputs(d, inferred, nuisance)
 
-    prepared = _prepare_problem(inferred, nuisance)
-    if prepared.Lambda is None:
-        raise RuntimeError("_prepare_problem did not compute Lambda.")
-    h = _calc_h(
-        d,
-        prepared.mu_I,
-        prepared.C_I,
-        prepared.A_I,
-        prepared.mu_eta,
-        prepared.C_eta,
-        prepared.L_C_I,
-        prepared.L_C_eta,
-    )
-    return _solve_symmetric_system(prepared.L_Lambda, prepared.Lambda, h)
+    return strategy.posterior_mean(d, inferred, nuisance)
 
 
 def calc_log_evidence(
     d: NDArrayFloat,
     inferred: list[GaussianComponent],
     nuisance: list[GaussianComponent],
+    *,
+    formulation: str = "precision",
 ) -> float:
     """Compute the log marginal likelihood (log evidence) log p(d).
 
@@ -165,36 +159,15 @@ def calc_log_evidence(
         If both ``inferred`` and ``nuisance`` are empty.
     """
     _validate_inputs(d, inferred, nuisance)
-    prepared = _prepare_problem(inferred, nuisance)
-
-    if not inferred:
-        # Only nuisance: d ~ N(mu_eta, C_eta)
-        mu_marginal = prepared.mu_eta
-        C_marginal = prepared.C_eta
-    elif not nuisance:
-        # Only inferred, no noise: d ~ N(A_I mu_I, A_I C_I A_I^T)
-        A_I = prepared.A_I
-        mu_I = prepared.mu_I
-        C_I = prepared.C_I
-        mu_marginal = A_I @ mu_I
-        C_marginal = A_I @ C_I @ A_I.T
-    else:
-        # General case
-        A_I = prepared.A_I
-        mu_I = prepared.mu_I
-        C_I = prepared.C_I
-        mu_eta = prepared.mu_eta
-        C_eta = prepared.C_eta
-        mu_marginal = A_I @ mu_I + mu_eta
-        C_marginal = A_I @ C_I @ A_I.T + C_eta
-
-    return _log_gaussian_density(d, mu_marginal, C_marginal)
+    return log_evidence(d, inferred, nuisance)
 
 
 def calc_posterior_predictive_mean(
     d: NDArrayFloat,
     inferred: list[GaussianComponent],
     nuisance: list[GaussianComponent],
+    *,
+    formulation: str = "precision",
 ) -> NDArrayFloat:
     """Compute the mean of the posterior predictive distribution.
 
@@ -222,13 +195,23 @@ def calc_posterior_predictive_mean(
         If ``inferred`` is empty (no variables to infer) or ``nuisance`` is
         empty (degenerate noise-free model).
     """
-    mu_post = calc_posterior_mean(d, inferred, nuisance)
-    prepared = _prepare_problem(inferred, nuisance)
-    return prepared.A_I @ mu_post + prepared.mu_eta
+    strategy = _select_strategy(formulation)
+    if not inferred:
+        raise ValueError("inferred must be non-empty to compute a posterior mean.")
+    if not nuisance:
+        raise ValueError(
+            "nuisance must be non-empty to compute the posterior mean; "
+            "the noise-free case (nuisance=[]) leads to a degenerate posterior."
+        )
+    _validate_inputs(d, inferred, nuisance)
+    return strategy.posterior_predictive_mean(d, inferred, nuisance)
 
 
 def calc_posterior_predictive_cov(
-    inferred: list[GaussianComponent], nuisance: list[GaussianComponent]
+    inferred: list[GaussianComponent],
+    nuisance: list[GaussianComponent],
+    *,
+    formulation: str = "precision",
 ) -> NDArrayFloat:
     """Compute the covariance of the posterior predictive distribution.
 
@@ -255,6 +238,14 @@ def calc_posterior_predictive_cov(
         If ``inferred`` is empty (no variables to infer) or ``nuisance`` is
         empty (degenerate noise-free model).
     """
-    C_post = calc_posterior_cov(inferred, nuisance)
-    prepared = _prepare_problem(inferred, nuisance)
-    return prepared.A_I @ C_post @ prepared.A_I.T + prepared.C_eta
+    strategy = _select_strategy(formulation)
+    if not inferred:
+        raise ValueError(
+            "inferred must be non-empty to compute a posterior covariance."
+        )
+    if not nuisance:
+        raise ValueError(
+            "nuisance must be non-empty to compute the posterior covariance; "
+            "the noise-free case (nuisance=[]) leads to a degenerate posterior."
+        )
+    return strategy.posterior_predictive_cov(inferred, nuisance)
