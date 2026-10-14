@@ -97,12 +97,12 @@ def posterior_predictive_mean(
     inferred: list[GaussianComponent],
     nuisance: list[GaussianComponent],
 ) -> NDArrayFloat:
-    """Posterior predictive mean using the data-space posterior."""
+    """Posterior predictive mean using the precision-space posterior."""
     return ppm(d, inferred, nuisance, posterior_mean)
 
 
 def posterior_predictive_cov(
     inferred: list[GaussianComponent], nuisance: list[GaussianComponent]
 ) -> NDArrayFloat:
-    """Posterior predictive covariance using the data-space posterior."""
+    """Posterior predictive covariance using the precision-space posterior."""
     return ppc(inferred, nuisance, posterior_cov)
